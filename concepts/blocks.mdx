@@ -1,0 +1,333 @@
+---
+title: "GrapesJS Blocks: Reusable Drag-and-Drop Snippets"
+description: "Understand GrapesJS block anatomy, add blocks via config or API, use component JSON vs HTML content, organize with categories, and customize appearance."
+---
+
+A **Block** in GrapesJS is a pre-packaged snippet of content — a button, a hero section, a product card — that users can drag from the Block Manager panel and drop onto the canvas. Under the hood a block is nothing more than a plain object with an `id`, a `label`, and a `content` property. That content is either a Component Definition object or an HTML string that gets parsed into components when dropped. Blocks themselves do not live on the canvas; they are the *template* from which dropped components are created.
+
+## Block Anatomy
+
+Every block has a small, well-defined set of properties:
+
+```ts
+{
+  id: string;           // Unique block identifier
+  label: string;        // Display name shown in the panel
+  content: string       // HTML string, Component Definition object, or array
+         | object
+         | Array<string | object>;
+  media?: string;       // SVG/img HTML shown as the block's icon
+  category?: string     // Category label or CategoryProperties object
+           | { id?: string; label: string; open?: boolean };
+  activate?: boolean;   // Trigger the component's `active` event on drop (e.g. open Asset Manager)
+  select?: boolean;     // Auto-select the component after drop (default with activate: true)
+  resetId?: boolean;    // Regenerate all IDs on drop
+  disable?: boolean;    // Prevent user interaction with this block
+  attributes?: Record<string, any>; // HTML attributes applied to the block element in the panel
+  onClick?: (block, editor) => void; // Custom click handler
+}
+```
+
+## Adding Blocks
+
+<Tabs>
+  <Tab title="Via Editor Config">
+    Define blocks at initialization time inside `blockManager.blocks`. This is the most common approach.
+
+    ```js
+    const editor = grapesjs.init({
+      container: '#gjs',
+      blockManager: {
+        appendTo: '.blocks-panel',
+        blocks: [
+          {
+            id: 'image',
+            label: 'Image',
+            media: `<svg viewBox="0 0 24 24" style="width:24px;height:24px">
+              <path d="M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89
+                20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2
+                0 0,0 21,19Z" />
+            </svg>`,
+            content: { type: 'image' },
+            activate: true,
+          },
+          {
+            id: 'text',
+            label: 'Text',
+            content: '<p>Insert your text here</p>',
+          },
+        ],
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Via Block Manager API">
+    Add, update, or remove blocks programmatically at any time after initialization.
+
+    ```js
+    const bm = editor.Blocks; // `Blocks` is an alias for `BlockManager`
+
+    // Add a new block
+    const block = bm.add('hero-section', {
+      label: 'Hero Section',
+      content: `<section class="hero">
+        <h1>Headline</h1>
+        <p>Supporting copy goes here.</p>
+      </section>`,
+      category: 'Sections',
+    });
+
+    // Get an existing block
+    const existing = bm.get('hero-section');
+
+    // Update block properties
+    existing.set({ label: 'Hero (Updated)' });
+
+    // Remove a block
+    bm.remove('hero-section');
+    ```
+
+    <Note>
+      Block Manager API methods only affect the UI panel. They do **not** modify components already placed on the canvas.
+    </Note>
+  </Tab>
+</Tabs>
+
+---
+
+## Block Content Types
+
+The `content` property is what gets dropped onto the canvas. GrapesJS supports three formats.
+
+### Component-Oriented (Recommended)
+
+Pass a **Component Definition** object. This is the most precise approach because it bypasses HTML parsing, preserves type information, and keeps your project JSON lean.
+
+```js
+// Define your component type
+editor.Components.addType('my-card', {
+  model: {
+    defaults: {
+      tagName: 'div',
+      attributes: { class: 'card' },
+      components: `
+        <div class="card__img"></div>
+        <div class="card__body">Card content</div>
+      `,
+      styles: `.card { border: 1px solid #ddd; border-radius: 4px; }`,
+    },
+  },
+});
+
+// Reference it as block content
+bm.add('card-block', {
+  label: 'Card',
+  content: { type: 'my-card' },
+});
+```
+
+When multiple blocks share the same underlying component, define the component once and reuse it — instead of duplicating properties across every block:
+
+```js
+// Define the base component and a variant
+editor.Components.addType('my-cmp', {
+  model: { defaults: { prop1: 'base', prop2: 'base' } }
+});
+editor.Components.addType('my-cmp-alt', {
+  extend: 'my-cmp',
+  model: { defaults: { prop1: 'alt', prop2: 'alt' } },
+});
+
+// Blocks reference the component type — no property duplication
+bm.add('block-1', { label: 'Block 1', content: { type: 'my-cmp-alt' } });
+bm.add('block-2', { label: 'Block 2', content: { type: 'my-cmp-alt' } });
+```
+
+### HTML Strings
+
+Useful when you want to allow full freedom over composition, or when importing framework-generated markup:
+
+```js
+bm.add('tailwind-hero', {
+  label: 'Tailwind Hero',
+  content: `<div class="bg-white py-24 sm:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <h1 class="text-4xl font-bold tracking-tight text-gray-900">
+        Hello from Tailwind
+      </h1>
+    </div>
+  </div>`,
+  category: 'Sections',
+});
+```
+
+After parsing, child elements are mapped to the best-matching built-in component type. You can still bind them to custom types via `isComponent` or `data-gjs-type` attributes:
+
+```js
+// Bind a class to a custom component type via isComponent
+editor.Components.addType('cmp-y', {
+  isComponent: (el) => el.classList?.contains('el-y'),
+  model: {
+    defaults: {
+      name: 'Y Component',
+      draggable: '.el-x',
+    },
+  },
+});
+
+// Or declare the type directly in HTML
+bm.add('layout', {
+  label: 'Layout',
+  content: `<div class="el-x">
+    <div data-gjs-type="cmp-y" class="el-y">A</div>
+    <div data-gjs-type="cmp-y" class="el-y">B</div>
+  </div>`,
+});
+```
+
+### Mixed Content
+
+Pass an array to combine component objects and HTML strings in one block:
+
+```js
+bm.add('mixed', {
+  label: 'Image + Text',
+  activate: true, // triggers `active` on the first component (the image)
+  content: [
+    { type: 'image' },
+    '<p>Caption text</p>',
+  ],
+});
+```
+
+---
+
+## Block Categories
+
+Group blocks in the panel by setting the `category` property. Pass a string for a simple label, or an object to control the initial open state:
+
+```js
+bm.add('col-1', {
+  label: '1 Column',
+  content: '<div class="row"><div class="col">Column</div></div>',
+  category: 'Layout',
+});
+
+bm.add('col-2', {
+  label: '2 Columns',
+  content: `<div class="row">
+    <div class="col">Col 1</div>
+    <div class="col">Col 2</div>
+  </div>`,
+  category: { label: 'Layout', open: false }, // render closed by default
+});
+```
+
+---
+
+## Customizing Block Appearance
+
+The `media` property accepts any HTML string — most commonly an inline SVG or an `<img>` tag:
+
+```js
+bm.add('button-block', {
+  label: 'Button',
+  media: `<svg viewBox="0 0 24 24" style="width:24px;height:24px">
+    <rect x="3" y="8" width="18" height="8" rx="2" fill="currentColor"/>
+    <text x="12" y="14" text-anchor="middle" fill="white" font-size="6">BTN</text>
+  </svg>`,
+  content: '<button class="btn">Click me</button>',
+});
+```
+
+For a fully custom block element (including additional DOM nodes or interactive buttons), enable the custom Block Manager UI:
+
+```js
+const editor = grapesjs.init({
+  blockManager: { custom: true },
+});
+
+editor.on('block:custom', (props) => {
+  // props.blocks      — Array<Block>, all registered blocks
+  // props.dragStart   — Function(block) — call to start a drag
+  // props.dragStop    — Function(block) — call to stop a drag
+  // props.container   — HTMLElement — default mount point
+  renderMyCustomBlockPanel(props);
+});
+```
+
+---
+
+## Important Caveats
+
+<Warning>
+  **Do not put non-serializable values (functions) in block `content`.** Functions in block content are lost when the project is saved and reloaded. Attach them to a component type instead.
+
+  ```js
+  // BAD — script function in block content is not saved
+  bm.add('bad-block', {
+    content: { type: 'my-cmp', script() { /* ... */ } },
+  });
+
+  // GOOD — attach the script to the component type
+  editor.Components.addType('my-cmp', {
+    model: { defaults: { script() { /* ... */ } } },
+  });
+  bm.add('good-block', {
+    content: { type: 'my-cmp' },
+  });
+  ```
+</Warning>
+
+<Warning>
+  **Do not put styles in block `content`.** Styles defined inside block content create conflicts when the same block is dropped multiple times and are never cleaned up when components are deleted.
+
+  ```js
+  // BAD — duplicate or orphaned styles in project JSON
+  bm.add('bad-styles-block', {
+    content: [
+      { type: 'my-cmp', styles: '.cmp { color: red }' },
+      `<div class="el">Elem</div>
+       <style>.el { color: blue }</style>`,
+    ],
+  });
+
+  // GOOD — declare styles on the component type
+  editor.Components.addType('my-cmp', {
+    model: { defaults: { styles: '.cmp { color: red }' } },
+  });
+  ```
+</Warning>
+
+---
+
+## Custom Click Behavior
+
+Instead of dropping on drag, you can attach a custom `onClick` handler to intercept block clicks:
+
+```js
+bm.add('smart-block', {
+  label: 'Smart Block',
+  content: { type: 'my-cmp' },
+  onClick: (block, editor) => {
+    // Append to the selected component instead of dropping at cursor
+    editor.getSelected()?.append(block.getContent());
+  },
+});
+```
+
+---
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Components" href="/concepts/components">
+    Deep-dive into the model-view architecture that powers block content.
+  </Card>
+  <Card title="Style Manager" href="/concepts/styles">
+    Control which CSS properties users can edit on dropped components.
+  </Card>
+  <Card title="Canvas" href="/concepts/canvas">
+    Learn how drag-and-drop works within the iframe-based canvas.
+  </Card>
+</CardGroup>

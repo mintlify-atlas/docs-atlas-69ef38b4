@@ -1,0 +1,294 @@
+---
+title: "Data Sources: Dynamic Data Binding in GrapesJS"
+description: "Bind dynamic data to GrapesJS components, styles, and traits using DataSources. Covers records, data variables, transformers, conditions, and storage control."
+---
+
+DataSources give you a first-class way to inject live data into your GrapesJS canvas. Instead of hardcoding content directly into components, you define a data source with records, then bind individual fields to component content, CSS properties, or trait values via data-variable paths. When a record value changes at runtime, every bound component updates automatically.
+
+## Key concepts
+
+<CardGroup cols={2}>
+  <Card title="DataSource" icon="database">
+    A named collection of records. Add one to the editor with `editor.DataSources.add({ id, records })`.
+  </Card>
+  <Card title="DataVariable" icon="link">
+    A component of type `data-variable` that resolves its value from a dot-separated path like `dsId.recordId.fieldName`.
+  </Card>
+  <Card title="StyleDataVariable" icon="paintbrush">
+    A `data-variable` object placed as a CSS property value to bind styles to a data source field.
+  </Card>
+  <Card title="TraitDataVariable" icon="sliders">
+    A `data-variable` object used as a trait value to bind component properties to a data source field.
+  </Card>
+</CardGroup>
+
+## Creating a DataSource
+
+```typescript
+const editor = grapesjs.init({ container: '#gjs' });
+
+editor.DataSources.add({
+  id: 'my-datasource',
+  records: [
+    { id: 'id1', content: 'Hello World' },
+    { id: 'id2', color: 'red' },
+  ],
+});
+```
+
+### Managing records programmatically
+
+```typescript
+const ds = editor.DataSources.get('my-datasource');
+
+// Read a record
+const record = ds.getRecord('id1');
+console.log(record.get('content')); // 'Hello World'
+
+// Update a record value
+record.set({ content: 'Updated content' });
+
+// Remove a data source
+editor.DataSources.remove('my-datasource');
+```
+
+## Binding data to components
+
+Place a component of `type: 'data-variable'` anywhere in the component tree. Set its `path` to the dot-separated location `dataSourceId.recordId.fieldName` and supply a `defaultValue` used when the path cannot be resolved.
+
+```typescript
+editor.addComponents([
+  {
+    tagName: 'h1',
+    type: 'text',
+    components: [
+      {
+        type: 'data-variable',
+        defaultValue: 'Fallback heading',
+        path: 'my-datasource.id1.content',
+      },
+    ],
+  },
+]);
+```
+
+The `h1` will render "Hello World" because `my-datasource → id1 → content` resolves to that value.
+
+### Reading and writing values by path
+
+```typescript
+const dsm = editor.DataSources;
+
+// Read a value from any data source by dot path
+const value = dsm.getValue('my-datasource.id1.content', 'default');
+// → 'Hello World'
+
+// Write a value by dot path
+dsm.setValue('my-datasource.id1.content', 'New content');
+```
+
+## Binding data to styles
+
+Pass a `data-variable` descriptor as the value of any CSS property in the `style` object. The component's style will stay synchronised with the data source field.
+
+```typescript
+editor.addComponents([
+  {
+    tagName: 'h1',
+    type: 'text',
+    components: [
+      {
+        type: 'data-variable',
+        defaultValue: 'Hello',
+        path: 'my-datasource.id1.content',
+      },
+    ],
+    style: {
+      color: {
+        type: 'data-variable',
+        defaultValue: 'black',
+        path: 'my-datasource.id2.color',
+      },
+    },
+  },
+]);
+```
+
+The heading's text colour is driven by `my-datasource → id2 → color`, which holds `'red'`.
+
+## Binding data to traits
+
+Traits accept the same `data-variable` descriptor as their `value`. This is useful for binding form field values, `href` attributes, or any other trait-controlled property to a data source.
+
+```typescript
+editor.DataSources.add({
+  id: 'form-data',
+  records: [{ id: 'defaults', value: 'I Love Grapes' }],
+});
+
+editor.addComponents([
+  {
+    tagName: 'input',
+    traits: [
+      'name',
+      'type',
+      {
+        type:  'text',
+        label: 'Value',
+        name:  'value',
+        value: {
+          type:         'data-variable',
+          defaultValue: '',
+          path:         'form-data.defaults.value',
+        },
+      },
+    ],
+  },
+]);
+```
+
+## Record mutability
+
+Records are mutable by default. Mark individual records as immutable to prevent accidental writes.
+
+```typescript
+editor.DataSources.add({
+  id: 'config',
+  records: [
+    { id: 'theme',   primaryColor: '#3b82f6' },           // mutable
+    { id: 'version', label: 'v1.0', mutable: false },     // immutable
+  ],
+});
+
+const ds = editor.DataSources.get('config');
+ds.getRecord('theme').set({ primaryColor: '#ef4444' });   // succeeds
+ds.getRecord('version').set({ label: 'v2.0' });           // throws an error
+```
+
+<Warning>
+Attempting to modify or remove an immutable record throws an error. Use this to protect configuration or version metadata that should never change at runtime.
+</Warning>
+
+## Transformers
+
+Transformers intercept record mutations before they are applied. Use them to validate input, coerce types, or enforce invariants across all writes to a data source.
+
+### `onRecordSetValue`
+
+Called whenever a record property is added or updated. Return the (possibly transformed) value, or throw to reject the change.
+
+```javascript
+editor.DataSources.add({
+  id: 'content-store',
+  records: [],
+  transformers: {
+    onRecordSetValue: ({ id, key, value }) => {
+      if (key !== 'content') {
+        return value; // pass through unchanged
+      }
+      if (typeof value !== 'string') {
+        throw new Error(`'content' must be a string, received ${typeof value}`);
+      }
+      // Always store content in uppercase
+      return value.toUpperCase();
+    },
+  },
+});
+```
+
+Any record in `content-store` will have its `content` field uppercased automatically:
+
+```javascript
+const ds = editor.DataSources.get('content-store');
+ds.records.add({ id: 'r1', content: '' });
+ds.getRecord('r1').set({ content: 'hello world' });
+console.log(ds.getRecord('r1').get('content')); // 'HELLO WORLD'
+```
+
+## Storage control
+
+By default, data sources are included in the project JSON when you call `editor.store()`. Set `skipFromStorage: true` on a data source that should not be persisted—for example, data fetched live from an external API.
+
+```typescript
+// Persisted: included in project.json on every save
+editor.DataSources.add({
+  id: 'site-config',
+  records: [
+    { id: 'branding', primaryColor: '#3b82f6', siteName: 'Acme' },
+  ],
+});
+
+// Transient: not saved; must be re-added programmatically after load
+editor.DataSources.add({
+  id: 'live-inventory',
+  skipFromStorage: true,
+  records: [
+    { id: 'p1', stock: 42 },
+  ],
+});
+```
+
+After loading a saved project, `site-config` is restored automatically. You must re-fetch and re-add `live-inventory` yourself:
+
+```typescript
+// After editor load
+const inventory = await fetchInventory();
+editor.DataSources.add({ id: 'live-inventory', records: inventory });
+```
+
+## Real-time updates
+
+Because records are Backbone models, any `set()` call propagates instantly to every bound component. Use this for counters, live feeds, or user-driven state.
+
+```typescript
+editor.DataSources.add({
+  id: 'stats',
+  records: [{ id: 'counter', value: 0 }],
+});
+
+editor.addComponents([
+  {
+    tagName: 'span',
+    type: 'text',
+    components: [
+      {
+        type: 'data-variable',
+        defaultValue: '0',
+        path: 'stats.counter.value',
+      },
+    ],
+  },
+]);
+
+// Increment every second — the canvas updates live
+const ds = editor.DataSources.get('stats');
+setInterval(() => {
+  const rec = ds.getRecord('counter');
+  rec.set({ value: rec.get('value') + 1 });
+}, 1000);
+```
+
+## Events reference
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `data:add` | `DataSource, options` | New data source added |
+| `data:remove` | `DataSource, options` | Data source removed |
+| `data:update` | `DataSource, changes` | Data source updated |
+| `data:path` | `{ dataSource, dataRecord, path, options }` | Record property changed (any source) |
+| `data:pathSource:SOURCE_ID` | `{ dataSource, dataRecord, path, options }` | Record property changed in a specific source |
+| `data:provider:load` | `{ dataSource, result }` | Provider data loaded |
+| `data:provider:loadAll` | — | All provider data sources loaded |
+| `data` | `{ event, model, options }` | Catch-all for all data events |
+
+```typescript
+// React to any record change in a specific data source
+editor.on('data:pathSource:site-config', ({ dataRecord, path }) => {
+  console.log('Config changed at', path, '→', dataRecord.get(path.split('.').pop()!));
+});
+
+// React to all data source changes
+editor.on('data:path', ({ dataSource, dataRecord, path }) => {
+  console.log(`[${dataSource.id}] ${path} changed`);
+});
+```

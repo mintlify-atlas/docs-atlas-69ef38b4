@@ -1,0 +1,428 @@
+---
+title: "GrapesJS Canvas: Iframe Editing Surface and Spots"
+description: "Explore the GrapesJS canvas iframe architecture, canvas spots, frames, Device Manager integration for responsive preview, drag-and-drop model, and events."
+---
+
+The GrapesJS **Canvas** is the central editing area of the editor — an `<iframe>`-based surface where users interact with their template visually. Every drop, click, hover, and selection happens inside this iframe, which keeps the editing environment isolated from the host page. The canvas is not just a passive viewport: it renders overlay elements called **Canvas Spots** on top of components for selection handles, resize grips, hover highlights, and drag targets, all without touching the exported HTML.
+
+## Architecture Overview
+
+At its core the canvas model tracks:
+
+- **Frames** — each `Frame` wraps one `<iframe>` and contains a root `ComponentWrapper` plus all associated `CssRule` objects.
+- **Zoom and coordinates** — the canvas model stores `zoom`, `x`, and `y` so the view can pan and zoom.
+- **Pointer position** — both world-space and screen-space cursor coordinates are maintained for use by drag-and-drop logic.
+- **Scripts and styles** — external resources (`scripts`, `styles`) injected into all frame `<head>` elements.
+
+```js
+// Canvas model defaults (from source)
+{
+  frame: '',
+  frames: [],
+  rulers: false,
+  zoom: 100,
+  x: 0,
+  y: 0,
+  scripts: [],   // External scripts injected into every frame
+  styles: [],    // External stylesheets injected into every frame
+}
+```
+
+## Configuration
+
+Pass the `canvas` key to `grapesjs.init()` to configure the canvas:
+
+```js
+const editor = grapesjs.init({
+  container: '#gjs',
+  canvas: {
+    // Append external scripts to all frame <head> elements (not exported)
+    scripts: ['https://cdn.example.com/lib.js'],
+
+    // Append external stylesheets to all frame <head> elements (not exported)
+    styles: ['https://cdn.example.com/style.css'],
+
+    // Initial <head> content for all frames. Default: '<!DOCTYPE html>'
+    frameContent: '<!DOCTYPE html>',
+
+    // Initial styles for all frames
+    frameStyle: 'body { background: #fff; }',
+
+    // Autoscroll threshold in pixels when dragging near canvas edges
+    autoscrollLimit: 50,
+
+    // Allow dropping external elements (e.g. image files from desktop)
+    allowExternalDrop: true,
+
+    // Selectors that should NOT be treated as textable (stop copy/paste intercept)
+    notTextable: ['button', 'a', 'input[type=checkbox]'],
+
+    // Custom badge label strategy
+    customBadgeLabel: (component) => component.getName(),
+  },
+});
+```
+
+<Accordion title="Full CanvasConfig reference">
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `scripts` | `(string \| object)[]` | `[]` | External scripts added to every frame `<head>`. Not exported. |
+| `styles` | `(string \| object)[]` | `[]` | External stylesheets added to every frame `<head>`. Not exported. |
+| `frameContent` | `string` | `'<!DOCTYPE html>'` | Initial HTML content of each frame. |
+| `frameStyle` | `string` | scrollbar styles | Initial CSS injected into every frame. |
+| `autoscrollLimit` | `number` | `50` | Distance in px from canvas edge that triggers auto-scroll while dragging. |
+| `allowExternalDrop` | `boolean` | `true` | Allow dropping external content (e.g. files from the OS). |
+| `notTextable` | `string[]` | `['button', 'a', ...]` | CSS selectors for elements that disable text copy/paste intercept. |
+| `customBadgeLabel` | `Function` | — | Return a custom label string for the component badge. |
+| `customSpots` | `boolean \| object` | — | Disable built-in canvas spots. See [Canvas Spots](#canvas-spots). |
+| `infiniteCanvas` | `boolean` | — | Experimental: enable infinite scrolling canvas. |
+| `scrollableCanvas` | `boolean` | `false` | Set canvas `overflow: auto` to allow scrolling oversized content. |
+| `customRenderer` | `Function` | — | Replace the default HTML renderer (e.g. mount React on the frame body). |
+
+</Accordion>
+
+---
+
+## Frames
+
+A **Frame** is the model that backs each `<iframe>` in the canvas. It holds a `ComponentWrapper` (the root component), a reference to all `CssRule` objects, and optional `width`/`height` constraints for responsive previews.
+
+```ts
+// Frame model defaults (from source)
+{
+  x: 0,          // Horizontal position within the canvas
+  y: 0,          // Vertical position within the canvas
+  width: null,   // Constrained width (set by Device Manager)
+  height: null,  // Constrained height (set by Device Manager)
+  head: [],      // <head> items: [{ tag, attributes }]
+  component: '', // Root ComponentWrapper definition
+  styles: '',    // Associated CssRule collection
+}
+```
+
+You can add and manage `<head>` items programmatically:
+
+```js
+const frame = editor.Pages.getSelected().getMainFrame();
+
+// Add a stylesheet link
+frame.addLink('https://cdn.example.com/custom.css');
+
+// Add a script tag
+frame.addScript('https://cdn.example.com/plugin.js');
+
+// Access head items
+console.log(frame.getHead());
+```
+
+### Multi-Frame / Multi-Page
+
+GrapesJS supports multiple frames through the Pages API. Selecting a different page swaps the active frame set:
+
+```js
+// Each page has its own set of frames
+const page = editor.Pages.getSelected();
+const frames = page.getFrames(); // Frames collection
+const mainFrame = page.getMainFrame();
+```
+
+---
+
+## Device Manager Integration
+
+The **Device Manager** drives responsive preview by setting frame dimensions. When a device is selected, the canvas updates the active frame's `width` and `height` to match, causing the iframe to reflow content at that breakpoint.
+
+```js
+grapesjs.init({
+  deviceManager: {
+    devices: [
+      { name: 'Desktop', width: '' },                          // Full width
+      { name: 'Tablet',  width: '768px', widthMedia: '768px' },
+      { name: 'Mobile',  width: '320px', widthMedia: '480px' },
+    ],
+  },
+});
+
+// Switch device programmatically
+editor.setDevice('Tablet');
+
+// Listen for device changes
+editor.on('change:device', () => {
+  console.log('Active device:', editor.getDevice());
+});
+```
+
+Internally, `Canvas.updateDevice()` syncs the frame dimensions from the device model whenever the device changes:
+
+```js
+// From Canvas source — called on device change
+updateDevice(opts = {}) {
+  const device = em.getDeviceModel();
+  const frame  = opts.frame || em.getCurrentFrameModel();
+  if (frame && device) {
+    const { width, height, minHeight } = device.attributes;
+    frame.set({ width, height, minHeight }, { noUndo: 1 });
+  }
+}
+```
+
+---
+
+## Canvas Spots
+
+**Canvas Spots** are overlay elements rendered on top of the canvas iframe. They do not affect exported HTML — they exist purely to deliver editing affordances: selection borders, resize handles, hover labels, drag target highlights.
+
+### Built-in Spot Types
+
+<Tabs>
+  <Tab title="select">
+    Renders the selection box and the component toolbar (move, clone, delete buttons) around the last selected component.
+
+    ```js
+    // Get toolbar items from the selected component
+    const toolbarItems = editor.getSelected().toolbar;
+    ```
+  </Tab>
+  <Tab title="hover">
+    Draws a highlight border around the currently hovered component and shows its name badge.
+
+    ```js
+    const name = editor.getHovered()?.getName();
+    ```
+  </Tab>
+  <Tab title="resize">
+    Shows resize handles when `resizable` is enabled on the component.
+
+    ```js
+    const resizable = editor.getSelected().resizable;
+    ```
+  </Tab>
+  <Tab title="target">
+    Highlights the drop target during drag-and-drop operations to show where a component will land.
+
+    You can restyle the position indicator via CSS:
+
+    ```css
+    .gjs-placeholder.horizontal { border-color: transparent red; }
+    .gjs-placeholder.vertical   { border-color: red transparent; }
+    .gjs-placeholder-int        { background-color: red; }
+    ```
+  </Tab>
+  <Tab title="spacing">
+    Visualizes margin and padding offsets on the currently hovered component.
+  </Tab>
+</Tabs>
+
+### Disabling Built-in Spots
+
+```js
+grapesjs.init({
+  canvas: {
+    // Disable only the hover spot
+    customSpots: { hover: true },
+
+    // Disable all built-in spots
+    customSpots: true,
+  },
+});
+```
+
+### Creating Custom Spots
+
+<Steps>
+  <Step title="Disable the built-in spot you want to replace">
+    ```js
+    grapesjs.init({
+      canvas: { customSpots: { hover: true } },
+    });
+    ```
+  </Step>
+  <Step title="Mount your UI inside the spots container">
+    ```js
+    editor.onReady(() => {
+      editor.Canvas.getSpotsEl().appendChild(myCustomOverlayEl);
+    });
+    ```
+  </Step>
+  <Step title="Add a spot, passing the component for position tracking">
+    ```js
+    editor.on('component:toggled', (component) => {
+      const { Canvas } = editor;
+      Canvas.removeSpots({ type: 'my-text-spot' });
+
+      if (component === editor.getSelected() && component.is('text')) {
+        Canvas.addSpot({ type: 'my-text-spot', component });
+      }
+    });
+    ```
+  </Step>
+  <Step title="Position with spot.getStyle() and re-enable pointer events where needed">
+    ```js
+    // In your template/render function:
+    // spot.getStyle() returns { width, height, top, left, position, translate }
+    myEl.style = spot.getStyle();
+
+    // Spots container uses pointer-events: none by default.
+    // Re-enable on interactive elements inside your spot:
+    ```
+
+    ```css
+    .my-spot-button {
+      pointer-events: auto;
+    }
+    ```
+  </Step>
+</Steps>
+
+#### CanvasSpot API
+
+```js
+const { Canvas } = editor;
+
+// Add a spot
+Canvas.addSpot({ type: 'my-spot', component: editor.getSelected() });
+
+// Get all current spots
+const spots = Canvas.getSpots();
+
+// Remove spots by type
+Canvas.removeSpots({ type: 'my-spot' });
+
+// Listen for spot updates
+editor.on('canvas:spot', () => {
+  console.log('Spots updated:', Canvas.getSpots());
+});
+
+// On a spot instance:
+const spot = Canvas.getSpots()[0];
+spot.getBoxRect();  // { width, height, x, y }
+spot.getStyle();    // CSSStyleDeclaration for absolute positioning
+spot.isType('select'); // type check
+```
+
+---
+
+## Drag-and-Drop Interaction Model
+
+GrapesJS drag-and-drop works on two levels:
+
+1. **Block dragging** — the user grabs a block from the Block Manager panel and drags it over the canvas. The editor uses the `canvas:dragdata` event to convert the data transfer payload into a `content` value, then finds the valid drop target.
+
+2. **Component re-ordering** — the user drags an already-placed component to a new position within the canvas. The `draggable` and `droppable` properties on each component control what placements are allowed.
+
+```js
+// Intercept external drops and customize content
+editor.on('canvas:dragdata', (dataTransfer, result) => {
+  // result.content is what will be added to the canvas
+  // result.setContent() lets you replace it
+  if (dataTransfer?.files?.length) {
+    result.setContent({
+      type: 'image',
+      attributes: { src: URL.createObjectURL(dataTransfer.files[0]) },
+    });
+  }
+});
+
+// React to a completed drop
+editor.on('canvas:drop', (dataTransfer, droppedComponent) => {
+  console.log('Dropped', droppedComponent);
+});
+```
+
+---
+
+## Canvas Events
+
+<Accordion title="Full list of canvas events">
+
+| Event | Description |
+|---|---|
+| `canvas:dragenter` | Something dragged into the canvas. Passes `DataTransfer` and content. |
+| `canvas:dragover` | Dragging continues over the canvas. Passes the triggering event. |
+| `canvas:dragend` | Drag operation ended. |
+| `canvas:dragdata` | On `dataTransfer` parse. Modify `result.content` to change what is dropped. |
+| `canvas:drop` | Element dropped. Passes `DataTransfer` and dropped component(s). |
+| `canvas:spot` | Any canvas spot updated. |
+| `canvas:spot:add` | New canvas spot added. `{ spot }` passed. |
+| `canvas:spot:update` | Canvas spot properties updated. `{ spot }` passed. |
+| `canvas:spot:remove` | Canvas spot removed. `{ spot }` passed. |
+| `canvas:coords` | Canvas pan coordinates changed. |
+| `canvas:zoom` | Canvas zoom level changed. |
+| `canvas:pointer` | Canvas pointer position updated. |
+| `canvas:refresh` | Canvas refreshed (spots/tools recalculated). |
+| `canvas:move:start` | Canvas panning started. |
+| `canvas:move` | Canvas is being panned. |
+| `canvas:move:end` | Canvas panning ended. |
+| `canvas:frame:load` | Frame `<iframe>` `onload` fired. |
+| `canvas:frame:load:head` | Frame `<head>` finished loading (scripts evaluated). |
+| `canvas:frame:load:body` | Frame body rendered with components. |
+| `canvas:frame:unload` | Frame is unloading (page change). |
+
+</Accordion>
+
+```js
+// Example: run code after the frame is fully ready
+editor.on('canvas:frame:load:body', ({ window, el, model, view }) => {
+  console.log('Canvas ready — frame window:', window);
+});
+
+// Example: track zoom changes
+editor.on('canvas:zoom', () => {
+  console.log('Zoom level:', editor.Canvas.getZoom());
+});
+
+// Example: track pointer coordinates
+editor.on('canvas:pointer', () => {
+  console.log('Pointer:', editor.Canvas.getPointer());
+});
+```
+
+---
+
+## Canvas API Reference
+
+```js
+const cv = editor.Canvas;
+
+// Zoom
+cv.getZoom();              // Current zoom percentage (100 = 100%)
+cv.setZoom(150);           // Set zoom to 150%
+
+// Coordinates (pan offset)
+cv.getCoords();            // { x, y }
+cv.setCoords(0, 0);        // Reset pan
+
+// Pointer position
+cv.getPointer();           // World-space { x, y }
+cv.getPointer({ toScreen: true }); // Screen-space { x, y }
+
+// Frames
+cv.getFrames();            // All frames
+cv.getFrame();             // Active frame model
+
+// Spots
+cv.getSpots();             // All CanvasSpot instances
+cv.addSpot({ type, component }); // Add a new spot
+cv.removeSpots({ type }); // Remove spots by type
+cv.getSpotsEl();           // The HTMLElement spots container
+
+// Refresh overlay elements (spots, tools)
+cv.refresh({ spots: true });
+```
+
+---
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Components" href="/concepts/components">
+    How components define draggable, droppable, and resizable behavior.
+  </Card>
+  <Card title="Blocks" href="/concepts/blocks">
+    How blocks are dragged from the panel and dropped onto the canvas.
+  </Card>
+  <Card title="Style Manager" href="/concepts/styles">
+    How the Device Manager drives responsive breakpoints in the canvas.
+  </Card>
+</CardGroup>

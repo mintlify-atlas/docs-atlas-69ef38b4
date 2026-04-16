@@ -1,0 +1,541 @@
+---
+title: "CSS Composer API: Rules, At-Rules & CssRule Model"
+description: "Reference for editor.Css in GrapesJS. Add, get, and remove CSS rules including at-rules and media queries. Covers the CssRule model properties and methods."
+---
+
+The CSS Composer (`editor.Css`) is GrapesJS's CSS rule engine. It stores every CSS rule in the project — component ID rules, class-based rules, and at-rules like `@media` — and provides a programmatic interface to create, read, update, and delete them. All changes are reflected immediately in the canvas and in the CSS export.
+
+## Methods
+
+### addRules
+
+```typescript
+addRules(css: string): CssRule[]
+```
+
+Parses a CSS string and adds all contained rules to the collection. If a rule with the same selector and media query already exists, its styles are replaced.
+
+<ParamField path="css" type="string" required>
+  A valid CSS string containing one or more rule declarations. At-rules such as `@media` are fully supported.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const rules = editor.Css.addRules(`
+  .my-class { color: red; font-size: 16px; }
+  @media (max-width: 992px) {
+    .my-class { color: darkred; }
+  }
+`);
+
+rules.forEach((rule) => console.log(rule.toCSS()));
+```
+```javascript JavaScript
+const rules = editor.Css.addRules(`
+  .my-class { color: red; font-size: 16px; }
+  @media (max-width: 992px) {
+    .my-class { color: darkred; }
+  }
+`);
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRule[]">
+  Array of the added (or updated) `CssRule` instances.
+</ResponseField>
+
+---
+
+### setRule
+
+```typescript
+setRule(
+  selectors: string,
+  style?: Record<string, any>,
+  opts?: SetRuleOptions
+): CssRule
+```
+
+Creates or replaces a CSS rule for the given selector string. The selector is parsed automatically, including pseudo-class state extraction (e.g., `:hover`).
+
+<ParamField path="selectors" type="string" required>
+  CSS selector string, e.g. `'.class1.class2'`, `'.class1:hover'`, or `'.class1, div#myid'`.
+</ParamField>
+
+<ParamField path="style" type="Record<string, any>">
+  Style properties and values to apply. Replaces the existing style unless `addStyles` is `true`.
+</ParamField>
+
+<ParamField path="opts" type="SetRuleOptions">
+  <Expandable title="SetRuleOptions">
+    <ParamField path="atRuleType" type="string">At-rule type, e.g. `'media'`, `'supports'`.</ParamField>
+    <ParamField path="atRuleParams" type="string">At-rule parameters, e.g. `'(min-width: 500px)'`.</ParamField>
+    <ParamField path="addStyles" type="boolean">If `true`, merges the passed styles with the existing ones instead of replacing them. Default `false`.</ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+// Simple class rule
+const rule = editor.Css.setRule('.card', { 'border-radius': '8px', padding: '16px' });
+console.log(rule.toCSS()); // .card { border-radius: 8px; padding: 16px; }
+
+// With pseudo-class state
+editor.Css.setRule('.btn:hover', { 'background-color': '#0056b3' });
+
+// Inside a media query
+editor.Css.setRule('.sidebar', { display: 'none' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+
+// Merge styles with existing rule
+editor.Css.setRule('.card', { background: 'white' });
+editor.Css.setRule('.card', { color: 'black' }, { addStyles: true });
+// Result: .card { background: white; color: black; }
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.card', { 'border-radius': '8px', padding: '16px' });
+editor.Css.setRule('.btn:hover', { 'background-color': '#0056b3' });
+editor.Css.setRule('.sidebar', { display: 'none' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRule">
+  The new or updated `CssRule` instance.
+</ResponseField>
+
+---
+
+### getRule
+
+```typescript
+getRule(selectors: string, opts?: RuleOptions): CssRule | undefined
+```
+
+Retrieves a CSS rule matching the given selector and optional at-rule parameters.
+
+<ParamField path="selectors" type="string" required>
+  Selector string, e.g. `'.myclass:hover'` or `'.myclass1, div#myid'`.
+</ParamField>
+
+<ParamField path="opts" type="RuleOptions">
+  <Expandable title="RuleOptions">
+    <ParamField path="atRuleType" type="string">At-rule type to match (e.g. `'media'`).</ParamField>
+    <ParamField path="atRuleParams" type="string">At-rule parameters to match (e.g. `'(min-width: 500px)'`).</ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.getRule('.hero:hover');
+rule?.setStyle({ opacity: '0.8' });
+
+// Get a media-query rule
+const mobileRule = editor.Css.getRule('.sidebar', {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+```
+```javascript JavaScript
+const rule = editor.Css.getRule('.hero:hover');
+const mobileRule = editor.Css.getRule('.sidebar', {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRule | undefined">
+  The matched `CssRule`, or `undefined` if no matching rule exists.
+</ResponseField>
+
+---
+
+### getRules
+
+```typescript
+getRules(selector?: string): CssRule[]
+```
+
+Returns all CSS rules in the project, or filters them by a matching selector string.
+
+<ParamField path="selector" type="string">
+  Optional CSS selector to filter by (e.g. `'#my-id'`, `'.my-class'`). When omitted all rules are returned.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+// All rules
+const all = editor.Css.getRules();
+console.log(all.length);
+
+// Rules for a specific component ID
+const selected = editor.getSelected();
+if (selected) {
+  const componentRules = editor.Css.getRules(`#${selected.getId()}`);
+  componentRules.forEach((r) => console.log(r.toCSS()));
+}
+```
+```javascript JavaScript
+const all = editor.Css.getRules();
+const selected = editor.getSelected();
+const componentRules = selected
+  ? editor.Css.getRules(`#${selected.getId()}`)
+  : [];
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRule[]">
+  Array of matching `CssRule` instances.
+</ResponseField>
+
+---
+
+### remove
+
+```typescript
+remove(rule: string | CssRule | CssRule[], opts?: any): CssRule[]
+```
+
+Removes one or more CSS rules. You can pass a `CssRule` instance, an array of instances, or a selector string (which removes all matching rules).
+
+<ParamField path="rule" type="string | CssRule | CssRule[]" required>
+  The rule(s) to remove. A string is treated as a selector filter identical to `getRules(selector)`.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+// Remove by selector string
+editor.Css.remove('.obsolete-class');
+
+// Remove a specific rule instance
+const rule = editor.Css.getRule('.my-rule');
+rule && editor.Css.remove(rule);
+
+// Remove multiple rules
+const toRemove = editor.Css.getRules('.bulk-class');
+editor.Css.remove(toRemove);
+```
+```javascript JavaScript
+editor.Css.remove('.obsolete-class');
+const rule = editor.Css.getRule('.my-rule');
+if (rule) editor.Css.remove(rule);
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRule[]">
+  Array of the removed rules.
+</ResponseField>
+
+---
+
+### clear
+
+```typescript
+clear(opts?: object): this
+```
+
+Removes **all** CSS rules from the collection and clears the internal rule cache. Use with caution in production flows as this action cannot be undone unless the editor's undo manager has a snapshot.
+
+<CodeGroup>
+```typescript TypeScript
+editor.Css.clear();
+```
+```javascript JavaScript
+editor.Css.clear();
+```
+</CodeGroup>
+
+---
+
+### getAll
+
+```typescript
+getAll(): CssRules
+```
+
+Returns the raw Backbone `CssRules` collection containing every rule. Useful for custom iteration or bulk operations.
+
+<CodeGroup>
+```typescript TypeScript
+const allRules = editor.Css.getAll();
+allRules.forEach((rule) => {
+  if (rule.getAtRule()) {
+    console.log('At-rule:', rule.getAtRule());
+  }
+});
+```
+```javascript JavaScript
+editor.Css.getAll().forEach((rule) => {
+  if (rule.getAtRule()) console.log('At-rule:', rule.getAtRule());
+});
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="CssRules">
+  The live Backbone collection of all `CssRule` models.
+</ResponseField>
+
+---
+
+## CssRule Model
+
+Each CSS rule in the project is represented by a `CssRule` instance. You interact with it through `get` / `set` for properties, and through helper methods for common operations.
+
+### Properties
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `selectors` | `Selectors` | `[]` | Collection of `Selector` models |
+| `style` | `Record<string, any>` | `{}` | CSS property declarations |
+| `selectorsAdd` | `string` | `''` | Raw additional selector string (not parsed into `Selector` models) |
+| `atRuleType` | `string` | `''` | At-rule type: `'media'`, `'supports'`, `'font-face'`, etc. |
+| `mediaText` | `string` | `''` | At-rule condition string, e.g. `'(max-width: 992px)'` |
+| `state` | `string` | `''` | Pseudo-class state, e.g. `'hover'`, `'focus'` |
+| `important` | `boolean \| string[]` | `false` | Apply `!important` to all (or specific) properties |
+| `stylable` | `boolean \| string[]` | `true` | Whether the rule can be edited from the Style Manager |
+| `singleAtRule` | `boolean` | `false` | For at-rules like `@font-face` that contain only declarations (no selector block) |
+| `shallow` | `boolean` | `false` | Exclude the rule from JSON export and CSS output |
+
+### getAtRule
+
+```typescript
+getAtRule(): string
+```
+
+Returns the full at-rule string when present, e.g. `'@media (min-width: 500px)'`. Returns an empty string for standard rules.
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.setRule('.nav', { display: 'none' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 600px)',
+});
+console.log(rule.getAtRule()); // '@media (max-width: 600px)'
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.nav', { display: 'none' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 600px)',
+});
+console.log(rule.getAtRule()); // '@media (max-width: 600px)'
+```
+</CodeGroup>
+
+---
+
+### selectorsToString
+
+```typescript
+selectorsToString(opts?: { skipState?: boolean; skipAdd?: boolean }): string
+```
+
+Returns the selector portion of the rule as a string, including the state pseudo-class.
+
+<ParamField path="opts.skipState" type="boolean">Omit the state suffix from the output.</ParamField>
+<ParamField path="opts.skipAdd" type="boolean">Omit the `selectorsAdd` string from the output.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.setRule('.btn:hover', { color: 'red' });
+console.log(rule.selectorsToString()); // '.btn:hover'
+console.log(rule.selectorsToString({ skipState: true })); // '.btn'
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.btn:hover', { color: 'red' });
+console.log(rule.selectorsToString()); // '.btn:hover'
+```
+</CodeGroup>
+
+---
+
+### getDeclaration
+
+```typescript
+getDeclaration(opts?: ToCssOptions): string
+```
+
+Returns the CSS declaration block without any surrounding at-rule wrapper, e.g. `'.class{color:red;}'`.
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.setRule('.badge', { background: 'gold' }, {
+  atRuleType: 'media',
+  atRuleParams: '(min-width: 500px)',
+});
+console.log(rule.getDeclaration()); // '.badge{background:gold;}'
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.badge', { background: 'gold' }, {
+  atRuleType: 'media',
+  atRuleParams: '(min-width: 500px)',
+});
+console.log(rule.getDeclaration()); // '.badge{background:gold;}'
+```
+</CodeGroup>
+
+---
+
+### toCSS
+
+```typescript
+toCSS(opts?: ToCssOptions): string
+```
+
+Returns the complete CSS string for the rule, including any wrapping at-rule.
+
+<ParamField path="opts" type="ToCssOptions">
+  <Expandable title="ToCssOptions">
+    <ParamField path="important" type="boolean | string[]">Mark all (or specific) properties as `!important`.</ParamField>
+    <ParamField path="allowEmpty" type="boolean">Return the rule string even when the style block is empty.</ParamField>
+    <ParamField path="style" type="StyleProps">Override the style used for serialization.</ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.setRule('.hero', { 'font-size': '24px' }, {
+  atRuleType: 'media',
+  atRuleParams: '(min-width: 500px)',
+});
+console.log(rule.toCSS());
+// '@media (min-width: 500px){.hero{font-size:24px;}}'
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.hero', { 'font-size': '24px' }, {
+  atRuleType: 'media',
+  atRuleParams: '(min-width: 500px)',
+});
+console.log(rule.toCSS());
+// '@media (min-width: 500px){.hero{font-size:24px;}}'
+```
+</CodeGroup>
+
+---
+
+### getComponent
+
+```typescript
+getComponent(): Component | null
+```
+
+Returns the `Component` associated with this rule when the rule targets a component-specific ID selector (e.g., `#abc123`). Returns `null` for class-based or other rules.
+
+<CodeGroup>
+```typescript TypeScript
+const selected = editor.getSelected()!;
+const rules = editor.Css.getRules(`#${selected.getId()}`);
+const cmp = rules[0]?.getComponent();
+console.log(cmp === selected); // true
+```
+```javascript JavaScript
+const selected = editor.getSelected();
+const rules = editor.Css.getRules(`#${selected.getId()}`);
+const cmp = rules[0]?.getComponent();
+```
+</CodeGroup>
+
+---
+
+### getState
+
+```typescript
+getState(): State | null
+```
+
+Returns the `State` model associated with this rule's `state` property, or `null` if the rule has no state.
+
+<CodeGroup>
+```typescript TypeScript
+const rule = editor.Css.setRule('.link:hover', { color: 'blue' });
+const state = rule.getState();
+console.log(state?.getName()); // 'hover'
+```
+```javascript JavaScript
+const rule = editor.Css.setRule('.link:hover', { color: 'blue' });
+console.log(rule.getState()?.getName()); // 'hover'
+```
+</CodeGroup>
+
+---
+
+### getDevice
+
+```typescript
+getDevice(): Device | null
+```
+
+Returns the `Device` model that corresponds to this rule's media query, or `null` if there is no match.
+
+<CodeGroup>
+```typescript TypeScript
+const mobileRule = editor.Css.setRule('.col', { width: '100%' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+const device = mobileRule.getDevice();
+console.log(device?.getName()); // 'Mobile' (if configured)
+```
+```javascript JavaScript
+const mobileRule = editor.Css.setRule('.col', { width: '100%' }, {
+  atRuleType: 'media',
+  atRuleParams: '(max-width: 768px)',
+});
+const device = mobileRule.getDevice();
+```
+</CodeGroup>
+
+---
+
+## Common Patterns
+
+### Get or create a rule
+
+`setRule` is idempotent for a given selector+at-rule combination. Call it to ensure a rule exists, then modify it safely.
+
+```typescript
+const rule = editor.Css.setRule('.my-component', {});
+rule.setStyle({ ...rule.getStyle(), 'border-radius': '4px' });
+```
+
+### Bulk-apply styles from a component selection
+
+```typescript
+const component = editor.getSelected();
+if (component) {
+  const id = component.getId();
+  editor.Css.setRule(`#${id}`, {
+    'box-shadow': '0 4px 12px rgba(0,0,0,.15)',
+    transition: 'all 0.2s ease',
+  });
+}
+```
+
+### Export all CSS
+
+```typescript
+const css = editor.getCss(); // uses CssComposer internally
+console.log(css);
+```
+
+---
+
+## Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `css:mount` | `{ rule: CssRule }` | A CssRule's view is mounted in the canvas |
+
+<Note>
+  Most CSS state changes are captured through component and style manager events rather than dedicated CSS events. Listen to `component:styleUpdate` or `style:target` for reactive style tracking.
+</Note>
+
+```typescript
+editor.on('css:mount', ({ rule }) => {
+  console.log('Rule mounted:', rule.selectorsToString());
+});
+```

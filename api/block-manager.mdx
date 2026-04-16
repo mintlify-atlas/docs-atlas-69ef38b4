@@ -1,0 +1,288 @@
+---
+title: "Block Manager API Reference - GrapesJS UI Modules"
+description: "Complete API reference for editor.Blocks (BlockManager) in GrapesJS. Add, retrieve, remove, and render blocks with drag-and-drop support in the canvas."
+---
+
+The Block Manager (`editor.Blocks`, also accessible as `editor.BlockManager`) is the module that handles the library of reusable content pieces a user can drag into the canvas. Each block wraps an HTML string or a component definition and can be organized into categories. The manager exposes a straightforward CRUD API plus drag-and-drop lifecycle hooks so you can build custom block UIs or extend the default one.
+
+```ts
+// Obtain the module
+const bm = editor.Blocks;
+```
+
+<Note>
+  All Block Manager API methods operate on the block library. They have no effect on components already dropped into the canvas.
+</Note>
+
+---
+
+## Methods
+
+### `add(id, props)`
+
+Add a new block to the collection.
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the block.
+</ParamField>
+
+<ParamField path="props" type="BlockProperties" required>
+  Block definition object. See [Block Properties](#block-properties) for the full list of supported fields.
+</ParamField>
+
+<ResponseField name="returns" type="Block">
+  The newly created Block instance.
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+const block = bm.add('hero-section', {
+  label: 'Hero Section',
+  content: '<section class="hero"><h1>Title</h1></section>',
+  category: 'Layout',
+  media: `<svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>`,
+  activate: true,
+});
+```
+
+```js JavaScript
+const block = bm.add('hero-section', {
+  label: 'Hero Section',
+  content: '<section class="hero"><h1>Title</h1></section>',
+  category: 'Layout',
+  activate: true,
+});
+```
+</CodeGroup>
+
+---
+
+### `get(id)`
+
+Retrieve a single block by its ID.
+
+<ParamField path="id" type="string" required>
+  The block ID.
+</ParamField>
+
+<ResponseField name="returns" type="Block | undefined">
+  The matching Block instance, or `undefined` if not found.
+</ResponseField>
+
+```ts
+const block = bm.get('hero-section');
+console.log(block?.getLabel()); // 'Hero Section'
+```
+
+---
+
+### `getAll()`
+
+Return the full block collection.
+
+<ResponseField name="returns" type="Collection&lt;Block&gt;">
+  Backbone collection containing all registered blocks.
+</ResponseField>
+
+```ts
+const all = bm.getAll();
+console.log(all.length); // e.g. 12
+```
+
+---
+
+### `remove(block)`
+
+Remove a block from the collection.
+
+<ParamField path="block" type="string | Block" required>
+  The block ID string or a Block instance.
+</ParamField>
+
+<ResponseField name="returns" type="Block">
+  The removed Block instance.
+</ResponseField>
+
+```ts
+bm.remove('hero-section');
+// or pass the instance
+const b = bm.get('hero-section');
+b && bm.remove(b);
+```
+
+---
+
+### `getCategories()`
+
+Return all block categories that have been registered via `add()`.
+
+<ResponseField name="returns" type="Collection&lt;Category&gt;">
+  Collection of Category models derived from blocks in the manager.
+</ResponseField>
+
+```ts
+const categories = bm.getCategories();
+categories.forEach((cat) => console.log(cat.get('label')));
+```
+
+---
+
+### `render(blocks?, opts?)`
+
+Render the block manager UI into the configured container, or return a standalone `HTMLElement` when `opts.external` is `true`.
+
+<ParamField path="blocks" type="Block[]">
+  Optional subset of blocks to display. When omitted all global blocks are rendered.
+</ParamField>
+
+<ParamField path="opts" type="object">
+  <Expandable title="options">
+    <ParamField path="opts.external" type="boolean">
+      When `true`, renders blocks into a new container and returns that `HTMLElement` without affecting the main panel.
+    </ParamField>
+    <ParamField path="opts.ignoreCategories" type="boolean">
+      Render blocks in a flat list, ignoring categories.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="returns" type="HTMLElement | undefined">
+  The block manager container element (or a new element if `external: true`).
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+// Render all blocks
+bm.render();
+
+// Filter and render only 'Layout' blocks
+const layoutBlocks = bm.getAll().filter(
+  (b) => b.getCategoryLabel() === 'Layout'
+);
+bm.render(layoutBlocks);
+
+// Render into a custom DOM element
+const el = bm.render(layoutBlocks, { external: true });
+document.getElementById('my-block-panel')!.appendChild(el!);
+```
+
+```js JavaScript
+// Render all blocks
+bm.render();
+
+// Render a filtered subset externally
+const el = bm.render(
+  bm.getAll().filter((b) => b.getCategoryLabel() === 'Layout'),
+  { external: true }
+);
+document.getElementById('my-block-panel').appendChild(el);
+```
+</CodeGroup>
+
+---
+
+## Block Properties
+
+These properties are passed to `add()` as the second argument.
+
+<ParamField path="label" type="string" required>
+  Human-readable name shown in the block panel, e.g. `'Heading'`.
+</ParamField>
+
+<ParamField path="content" type="string | ComponentDefinition | Array&lt;string | ComponentDefinition&gt;">
+  Content to drop onto the canvas. Can be an HTML string, a [Component Definition](/api/components), or an array mixing both.
+</ParamField>
+
+<ParamField path="category" type="string | CategoryProperties">
+  Category label or object to group blocks, e.g. `'Basic'`.
+</ParamField>
+
+<ParamField path="media" type="string">
+  HTML string for the block icon/thumbnail, e.g. an `<svg>` or `<img>` tag.
+  Defaults to `''`.
+</ParamField>
+
+<ParamField path="attributes" type="Record&lt;string, any&gt;">
+  HTML attributes applied to the block element in the UI. Defaults to `{}`.
+</ParamField>
+
+<ParamField path="select" type="boolean">
+  When `true`, the dropped component is immediately selected.
+  Defaults to `false`.
+</ParamField>
+
+<ParamField path="activate" type="boolean">
+  When `true`, the `active` event is triggered on the dropped component (e.g. opens the Asset Manager for image components).
+  Defaults to `false`.
+</ParamField>
+
+<ParamField path="disable" type="boolean">
+  Prevent the block from being dragged or interacted with.
+  Defaults to `false`.
+</ParamField>
+
+<ParamField path="resetId" type="boolean">
+  When `true`, all IDs of the dropped component and its children are regenerated.
+  Defaults to `false`.
+</ParamField>
+
+<ParamField path="onClick" type="(block: Block, editor: Editor) => void">
+  Custom callback invoked when the block is clicked instead of the default drag behavior.
+</ParamField>
+
+---
+
+## Events
+
+Listen to block lifecycle events via `editor.on(event, callback)`.
+
+| Event | Callback signature | Description |
+|---|---|---|
+| `block:add` | `(block: Block)` | Fired when a block is added to the collection. |
+| `block:remove` | `(block: Block)` | Fired when a block is removed. |
+| `block:remove:before` | `(block, remove, opts)` | Fired just before a block is removed; call `remove()` to proceed. |
+| `block:update` | `(block: Block, changes)` | Fired when a block property is updated. |
+| `block:drag:start` | `(block: Block, event?)` | Fired when the user starts dragging a block. |
+| `block:drag` | `(block: Block, event?)` | Fires continuously while the block is being dragged. |
+| `block:drag:stop` | `(component?, block: Block)` | Fired when dragging ends. `component` is the dropped result (if any). |
+| `block:category:update` | `({ category, changes, options })` | Fired when a block category property changes. |
+| `block:custom` | `(BlocksCustomData)` | Fired when using a [custom block UI](https://grapesjs.com/docs/modules/Blocks.html#customization). |
+| `block` | `({ event, model, ... })` | Catch-all for all block events. |
+
+```ts
+editor.on('block:add', (block) => {
+  console.log('Added:', block.getLabel());
+});
+
+editor.on('block:drag:stop', (component, block) => {
+  if (component) {
+    console.log(`Dropped "${block.getLabel()}" → component id: ${component.getId()}`);
+  }
+});
+```
+
+---
+
+## Configuration
+
+Pass `blockManager` options during `grapesjs.init()`:
+
+```ts
+const editor = grapesjs.init({
+  blockManager: {
+    appendTo: '#blocks-container', // CSS selector or HTMLElement
+    blocks: [
+      {
+        id: 'image',
+        label: 'Image',
+        content: { type: 'image' },
+        activate: true,
+      },
+    ],
+  },
+});
+```
+
+<Tip>
+  For a fully custom block panel UI, set `blockManager.custom: true` and render your own component inside the `block:custom` event callback.
+</Tip>

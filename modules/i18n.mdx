@@ -1,0 +1,283 @@
+---
+title: "I18n Module: Internationalization in GrapesJS"
+description: "Translate the GrapesJS editor UI using built-in locale files or your own strings. Configure locale detection, add languages, and customise existing messages."
+---
+
+The I18n module lets you present the GrapesJS editor interface in any language. The core library ships with English by default and includes community-maintained locale files for over twenty other languages. You can load them at init time, override individual strings, and even ship your own locale files alongside a plugin.
+
+<Note>
+This guide covers GrapesJS v0.15.9 and later.
+</Note>
+
+## Available locale files
+
+The following locales are bundled with GrapesJS and can be imported directly from the package:
+
+<CardGroup cols={4}>
+  <Card title="Arabic" icon="globe">ar</Card>
+  <Card title="Bosnian" icon="globe">bs</Card>
+  <Card title="Catalan" icon="globe">ca</Card>
+  <Card title="German" icon="globe">de</Card>
+  <Card title="Greek" icon="globe">el</Card>
+  <Card title="English" icon="globe">en (default)</Card>
+  <Card title="Spanish" icon="globe">es</Card>
+  <Card title="Persian" icon="globe">fa</Card>
+  <Card title="French" icon="globe">fr</Card>
+  <Card title="Hebrew" icon="globe">he</Card>
+  <Card title="Indonesian" icon="globe">id</Card>
+  <Card title="Italian" icon="globe">it</Card>
+  <Card title="Korean" icon="globe">ko</Card>
+  <Card title="Norwegian" icon="globe">nb</Card>
+  <Card title="Dutch" icon="globe">nl</Card>
+  <Card title="Polish" icon="globe">pl</Card>
+  <Card title="Portuguese" icon="globe">pt</Card>
+  <Card title="Russian" icon="globe">ru</Card>
+  <Card title="Swedish" icon="globe">se</Card>
+  <Card title="Turkish" icon="globe">tr</Card>
+  <Card title="Vietnamese" icon="globe">vi</Card>
+  <Card title="Chinese" icon="globe">zh</Card>
+</CardGroup>
+
+Language codes follow the [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) standard.
+
+## Configuring a locale at init time
+
+Import the locale files you need and pass them via the `i18n.messages` option. By default, `detectLocale` is `true` and the editor matches the browser's language automatically.
+
+```javascript
+import grapesjs from 'grapesjs';
+import it from 'grapesjs/locale/it';
+import tr from 'grapesjs/locale/tr';
+import de from 'grapesjs/locale/de';
+
+const editor = grapesjs.init({
+  i18n: {
+    // locale: 'en',           // override auto-detection
+    // detectLocale: true,     // enabled by default
+    localeFallback: 'en',      // used when a key is missing in the active locale
+    messages: { it, tr, de },
+  },
+});
+```
+
+Italian-speaking browsers will now see the editor in Italian, Turkish speakers in Turkish, and everyone else falls back to English.
+
+### Switching locale at runtime
+
+```javascript
+const i18n = editor.I18n;
+
+// Read current locale
+console.log(i18n.getLocale()); // e.g. 'en'
+
+// Switch to French
+i18n.setLocale('fr');
+```
+
+## Overriding existing strings
+
+Find the path of any string in the [English locale file](https://github.com/GrapesJS/grapesjs/blob/master/src/i18n/locale/en.js) and pass a matching nested object to `addMessages`. Only the keys you specify are updated; everything else is preserved.
+
+```javascript
+// Change the empty-state message shown in Style Manager when nothing is selected
+editor.I18n.addMessages({
+  en: {
+    styleManager: {
+      empty: 'Click a component to start styling',
+    },
+  },
+});
+```
+
+The English locale structure (abridged) looks like this:
+
+```javascript
+{
+  assetManager: {
+    addButton:    'Add image',
+    inputPlh:     'http://path/to/the/image.jpg',
+    modalTitle:   'Select Image',
+    uploadTitle:  'Drop files here or click to upload',
+  },
+  styleManager: {
+    empty:      'Select an element before using Style Manager',
+    layer:      'Layer',
+    fileButton: 'Images',
+    sectors: {
+      general:      'General',
+      layout:       'Layout',
+      typography:   'Typography',
+      decorations:  'Decorations',
+      extra:        'Extra',
+      flex:         'Flex',
+      dimension:    'Dimension',
+    },
+    properties: {
+      // Sub-property labels for composite/stack types
+      'text-shadow-h':  'X',
+      'text-shadow-v':  'Y',
+      // ...
+    },
+  },
+  traitManager: {
+    empty: 'Select an element before using Trait Manager',
+    label: 'Component settings',
+  },
+  storageManager: {
+    recover: 'Do you want to recover unsaved changes?',
+  },
+  domComponents: {
+    names: {
+      '':       'Box',
+      wrapper:  'Body',
+      text:     'Text',
+      image:    'Image',
+      // ...
+    },
+  },
+}
+```
+
+### Translating auto-generated property names
+
+Style Manager generates labels for CSS properties from their names. Override them under `styleManager.properties`:
+
+```javascript
+editor.I18n.addMessages({
+  en: {
+    styleManager: {
+      properties: {
+        'margin-top':    'Top',
+        'margin-right':  'Right',
+        'margin-bottom': 'Bottom',
+        'margin-left':   'Left',
+      },
+    },
+  },
+});
+```
+
+## Adding messages for multiple locales at once
+
+`addMessages` performs a deep merge, so you can pass any number of locales in a single call:
+
+```javascript
+editor.I18n.addMessages({
+  en: {
+    styleManager: { empty: 'Select a component to style it' },
+  },
+  it: {
+    styleManager: { empty: 'Seleziona un componente per stilizzarlo' },
+  },
+  de: {
+    styleManager: { empty: 'Wählen Sie ein Element aus, um es zu stylen' },
+  },
+});
+```
+
+## API reference
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `getLocale` | `() => string` | Returns the active locale code |
+| `setLocale` | `(locale: string) => this` | Switches the active locale |
+| `getMessages` | `(lang?: string) => object` | Returns all messages, or those for a specific lang |
+| `setMessages` | `(msg: Messages) => this` | Replaces the entire messages object |
+| `addMessages` | `(msg: Messages) => this` | Deep-merges new messages into the existing set |
+| `t` | `(key: string, opts?) => string` | Translates a dot-separated key |
+
+### Using `t()` in plugins
+
+```javascript
+editor.I18n.addMessages({
+  en: { 'my-plugin': { label: 'My Label', hint: 'Hint text' } },
+  it: { 'my-plugin': { label: 'La mia etichetta', hint: 'Testo suggerimento' } },
+});
+
+// Translate a nested key with dot notation
+const label = editor.I18n.t('my-plugin.label');
+// → 'My Label' (in English) or 'La mia etichetta' (in Italian)
+
+// Translate with interpolated params
+editor.I18n.addMessages({ en: { greeting: 'Hello, {name}!' } });
+const msg = editor.I18n.t('greeting', { params: { name: 'Ada' } });
+// → 'Hello, Ada!'
+```
+
+## Adding support for a new language
+
+<Steps>
+  <Step title="Check for duplicates">
+    Verify the locale doesn't already exist in [`src/i18n/locale`](https://github.com/GrapesJS/grapesjs/tree/master/src/i18n/locale) and that no open GitHub issue covers the same language.
+  </Step>
+  <Step title="Open a tracking issue">
+    [Open a new issue](https://github.com/GrapesJS/grapesjs/issues/new?title=XX%20Language%20support) before starting. This avoids duplicate work.
+  </Step>
+  <Step title="Create the locale file">
+    Create a new branch from `dev`, copy `en.js` to the new locale name (e.g. `ja.js`), and translate all strings.
+  </Step>
+  <Step title="Submit a pull request">
+    Open a PR from your branch targeting `dev`. Include `Closes #ISSUE_NUMBER` in the description so the issue closes automatically on merge.
+  </Step>
+</Steps>
+
+## I18n in plugins
+
+Structure your plugin with a `locale/` directory, place all default strings in `locale/en.js`, and merge them in during plugin init.
+
+```
+my-grapesjs-plugin/
+├── src/
+│   ├── index.js
+│   └── locale/
+│       └── en.js   ← default strings
+└── locale/         ← compiled output (shipped to npm)
+    ├── en.js
+    ├── fr.js
+    └── de.js
+```
+
+```javascript
+// src/locale/en.js
+export default {
+  'grapesjs-my-plugin': {
+    buttonLabel: 'Open panel',
+    emptyState:  'Nothing here yet',
+  },
+};
+```
+
+```javascript
+// src/index.js
+import en from './locale/en';
+
+export default (editor, opts = {}) => {
+  const options = { i18n: {}, ...opts };
+
+  // Register English defaults plus any overrides passed by the user
+  editor.I18n.addMessages({ en, ...options.i18n });
+};
+```
+
+Plugin users can then supply translations for other locales:
+
+```javascript
+import grapesjs    from 'grapesjs';
+import myPlugin    from 'grapesjs-my-plugin';
+import myPluginFr  from 'grapesjs-my-plugin/locale/fr';
+
+grapesjs.init({
+  plugins: [myPlugin],
+  pluginsOpts: {
+    [myPlugin]: { i18n: { fr: myPluginFr } },
+  },
+});
+```
+
+## Events reference
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `i18n:update` | `messages` | Fired when `setMessages` replaces the message set |
+| `i18n:add` | `messages` | Fired when `addMessages` merges new messages |
+| `i18n:locale` | `{ value, valuePrev }` | Fired when the active locale changes |

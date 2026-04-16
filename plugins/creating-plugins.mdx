@@ -1,0 +1,432 @@
+---
+title: "Creating GrapesJS Plugins: A Complete Guide"
+description: "Build custom GrapesJS plugins with typed options, access every editor module, follow best practices, and publish your plugin to npm using grapesjs-cli."
+---
+
+A GrapesJS plugin is nothing more than a function — no classes, no lifecycle methods, no configuration files. You receive the fully initialized editor instance as the first argument and an options object as the second, and from there you can reach every manager the editor exposes. This simplicity makes plugins easy to write, easy to test, and easy to share.
+
+## Anatomy of a plugin
+
+The `Plugin<C>` type exported from `grapesjs` captures the exact shape every plugin must have:
+
+```typescript
+// From packages/core/src/plugin_manager/index.ts
+type PluginOptions = Record<string, any>;
+export type Plugin<T extends PluginOptions = {}> = (editor: Editor, config: T) => void;
+```
+
+- `editor` — the `Editor` instance, giving you access to every module.
+- `config` — the options object supplied by the caller (defaults to `{}`).
+- The return value is always `void`.
+
+## Basic plugin (no options)
+
+A minimal plugin registers some editor content and requires no external options.
+
+```javascript
+function myPlugin(editor) {
+  editor.Blocks.add('hero-section', {
+    label: 'Hero Section',
+    category: 'Layout',
+    content: `
+      <section class="hero">
+        <h1>Your headline here</h1>
+        <p>Supporting copy.</p>
+      </section>
+    `,
+  });
+
+  editor.Commands.add('log-html', {
+    run(editor) {
+      console.log(editor.getHtml());
+    },
+  });
+}
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [myPlugin],
+});
+```
+
+## Plugin with options
+
+<CodeGroup>
+
+```typescript TypeScript
+import type { Plugin } from 'grapesjs';
+
+interface MyPluginOptions {
+  blockLabel?: string;
+  enableCommand?: boolean;
+}
+
+const myPlugin: Plugin<MyPluginOptions> = (editor, options) => {
+  const { blockLabel = 'My Block', enableCommand = true } = options;
+
+  editor.Blocks.add('my-block', {
+    label: blockLabel,
+    content: '<div class="my-block">Content</div>',
+  });
+
+  if (enableCommand) {
+    editor.Commands.add('my-plugin:log', {
+      run(editor) {
+        console.log(editor.getHtml());
+      },
+    });
+  }
+};
+
+export default myPlugin;
+```
+
+```javascript JavaScript
+const myPlugin = (editor, options = {}) => {
+  const { blockLabel = 'My Block', enableCommand = true } = options;
+
+  editor.Blocks.add('my-block', {
+    label: blockLabel,
+    content: '<div class="my-block">Content</div>',
+  });
+
+  if (enableCommand) {
+    editor.Commands.add('my-plugin:log', {
+      run(editor) {
+        console.log(editor.getHtml());
+      },
+    });
+  }
+};
+
+export default myPlugin;
+```
+
+</CodeGroup>
+
+## Using `usePlugin` for type-safe options
+
+When consuming a typed plugin, `usePlugin` validates the options object against the plugin's type parameter at compile time, catching mismatches before they reach the browser.
+
+```typescript
+import grapesjs, { usePlugin } from 'grapesjs';
+import myPlugin from './my-plugin';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [
+    usePlugin(myPlugin, {
+      blockLabel: 'Hero Block',  // type-checked against MyPluginOptions
+      enableCommand: false,
+    }),
+  ],
+});
+```
+
+<Tip>
+  Using `usePlugin` eliminates the need for a separate `pluginsOpts` entry. The options are captured in a closure and passed directly when GrapesJS calls your plugin.
+</Tip>
+
+## Plugin lifecycle
+
+Understanding when your plugin runs prevents subtle ordering bugs.
+
+```
+grapesjs.init() called
+        │
+        ▼
+Internal modules initialize
+(Blocks, Components, Commands, StyleManager, etc.)
+        │
+        ▼
+plugins[] executed in order   ← your plugin runs here
+        │
+        ▼
+em.loadOnStart()
+(restores persisted components, CSS rules, pages)
+        │
+        ▼
+editor.render() (unless autorender: false)
+```
+
+Because `loadOnStart` has not yet run when your plugin executes, you can safely register new component types, blocks, commands, and style sectors. If you need to act on loaded project data, listen to the `load` event:
+
+```javascript
+const myPlugin = (editor) => {
+  // safe: registering types before data loads
+  editor.Components.addType('my-widget', { /* ... */ });
+
+  // safe: reacting to loaded content
+  editor.on('load', () => {
+    console.log('Project loaded, components:', editor.Components.getComponents().length);
+  });
+};
+```
+
+## Accessing editor modules
+
+Every built-in manager is available as a property on the `editor` instance.
+
+<Tabs>
+  <Tab title="Blocks">
+    ```javascript
+    const myPlugin = (editor) => {
+      // Add a drag-and-drop block
+      editor.Blocks.add('card', {
+        label: 'Card',
+        category: 'Basic',
+        content: '<div class="card"><p>Card content</p></div>',
+        attributes: { class: 'fa fa-square' },
+      });
+    };
+    ```
+  </Tab>
+  <Tab title="Components">
+    ```javascript
+    const myPlugin = (editor) => {
+      // Register a custom component type
+      editor.Components.addType('countdown', {
+        model: {
+          defaults: {
+            tagName: 'div',
+            attributes: { 'data-target': '' },
+            traits: [
+              { type: 'date', name: 'data-target', label: 'Target date' },
+            ],
+          },
+        },
+      });
+    };
+    ```
+  </Tab>
+  <Tab title="Commands">
+    ```javascript
+    const myPlugin = (editor) => {
+      // Register a reusable command
+      editor.Commands.add('my-plugin:export', {
+        run(editor, sender, options = {}) {
+          const html = editor.getHtml();
+          const css = editor.getCss();
+          options.onExport?.({ html, css });
+        },
+        stop(editor) {
+          // optional teardown
+        },
+      });
+    };
+    ```
+  </Tab>
+  <Tab title="Style Manager">
+    ```javascript
+    const myPlugin = (editor) => {
+      // Add a custom style sector
+      editor.StyleManager.addSector('my-plugin', {
+        name: 'My Plugin',
+        open: true,
+        properties: [
+          {
+            name: 'Border radius',
+            property: 'border-radius',
+            type: 'slider',
+            units: ['px', '%'],
+            min: 0,
+            max: 100,
+          },
+        ],
+      });
+    };
+    ```
+  </Tab>
+  <Tab title="Panels">
+    ```javascript
+    const myPlugin = (editor) => {
+      // Add a button to an existing panel
+      editor.Panels.addButton('options', {
+        id: 'my-plugin-btn',
+        className: 'fa fa-cog',
+        command: 'my-plugin:open-settings',
+        attributes: { title: 'Open settings' },
+      });
+    };
+    ```
+  </Tab>
+</Tabs>
+
+## Best practices
+
+<Note>
+  Always use editor APIs to modify editor state. Never query or mutate the canvas DOM directly — GrapesJS manages the iframe and its contents, and direct DOM changes will be lost or cause inconsistencies.
+</Note>
+
+**Namespace your identifiers.** Prefix block IDs, command names, and component types with your plugin name to avoid collisions with other plugins.
+
+```javascript
+// Good
+editor.Blocks.add('my-plugin/hero', { ... });
+editor.Commands.add('my-plugin:export', { ... });
+editor.Components.addType('my-plugin-carousel', { ... });
+
+// Avoid
+editor.Blocks.add('hero', { ... });  // likely to conflict
+```
+
+**Provide option defaults.** Always destructure options with defaults so your plugin works when called without any `pluginsOpts` entry.
+
+```javascript
+const myPlugin = (editor, options = {}) => {
+  const {
+    blockLabel = 'Hero',
+    showCommand = true,
+    stylePrefix = 'mp-',
+  } = options;
+  // ...
+};
+```
+
+**Keep plugins focused.** A plugin should do one thing well. Separate concerns — for example, a block library plugin and a custom export plugin — rather than bundling unrelated features.
+
+**Never modify the outer document DOM.** Plugins that inject styles or elements into `document.body` outside the canvas create fragile integrations. Use `editor.Canvas` APIs or canvas CSS configuration instead.
+
+## Developing with grapesjs-cli
+
+[grapesjs-cli](https://github.com/GrapesJS/cli) is the official scaffolding and build tool for GrapesJS plugins. It sets up Webpack, Babel, a development server with live reload, and a production build in one command.
+
+<Steps>
+  <Step title="Install grapesjs-cli globally">
+    ```bash
+    npm install -g grapesjs-cli
+    ```
+  </Step>
+  <Step title="Scaffold a new plugin project">
+    ```bash
+    grapes init
+    ```
+
+    The CLI will prompt for a plugin name and generate a project with the following structure:
+
+    ```
+    grapesjs-my-plugin/
+    ├── src/
+    │   └── index.ts        # Plugin entry point
+    ├── test/
+    │   └── index.ts        # Test suite
+    ├── package.json
+    ├── tsconfig.json
+    └── webpack.config.js
+    ```
+  </Step>
+  <Step title="Start the development server">
+    ```bash
+    cd grapesjs-my-plugin
+    npm run dev
+    ```
+
+    This opens a browser preview with a minimal GrapesJS editor that loads your plugin, hot-reloading on every save.
+  </Step>
+  <Step title="Build for production">
+    ```bash
+    npm run build
+    ```
+
+    Outputs a minified UMD bundle to `dist/` alongside TypeScript declaration files.
+  </Step>
+  <Step title="Publish to npm">
+    Update `package.json` with a unique name following the `grapesjs-*` convention, ensure `main`, `module`, and `types` point to your build output, then publish:
+
+    ```bash
+    npm publish --access public
+    ```
+
+    <Tip>
+      Follow the `grapesjs-*` naming convention so your plugin is discoverable by users searching the npm registry for GrapesJS integrations.
+    </Tip>
+  </Step>
+</Steps>
+
+## Complete example
+
+The following is a self-contained, production-ready plugin written in TypeScript that demonstrates all the patterns covered above.
+
+```typescript
+import type { Plugin } from 'grapesjs';
+
+export interface GreeterPluginOptions {
+  /** Label used for the greeting block. Defaults to 'Greeting'. */
+  blockLabel?: string;
+  /** CSS class applied to the greeting element. Defaults to 'greeting'. */
+  className?: string;
+}
+
+const greetingPlugin: Plugin<GreeterPluginOptions> = (editor, options) => {
+  const { blockLabel = 'Greeting', className = 'greeting' } = options;
+
+  // Register a block
+  editor.Blocks.add('greeting-block', {
+    label: blockLabel,
+    category: 'Basic',
+    content: `<div class="${className}"><h2>Hello, world!</h2></div>`,
+    attributes: { class: 'fa fa-hand-o-right' },
+  });
+
+  // Register a component type
+  editor.Components.addType('greeting', {
+    isComponent: (el) => el.classList?.contains(className),
+    model: {
+      defaults: {
+        tagName: 'div',
+        classes: [className],
+        traits: [
+          { name: 'data-greeting', label: 'Greeting text', placeholder: 'Hello, world!' },
+        ],
+      },
+    },
+  });
+
+  // Register a command
+  editor.Commands.add('greeting:highlight', {
+    run(editor) {
+      const selected = editor.getSelected();
+      if (selected?.is('greeting')) {
+        editor.select(null);
+        editor.select(selected);
+      }
+    },
+  });
+};
+
+export default greetingPlugin;
+```
+
+Consuming the plugin with full type safety:
+
+```typescript
+import grapesjs, { usePlugin } from 'grapesjs';
+import greetingPlugin from './greeting-plugin';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [
+    usePlugin(greetingPlugin, {
+      blockLabel: 'Welcome Block',
+      className: 'welcome-section',
+    }),
+  ],
+});
+```
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Plugin overview" icon="plug" href="/plugins/overview">
+    How to install and configure third-party plugins in your editor.
+  </Card>
+  <Card title="Components module" icon="cube" href="https://grapesjs.com/docs/modules/Components.html">
+    Deep dive into defining custom component types.
+  </Card>
+  <Card title="Block Manager" icon="squares-four" href="https://grapesjs.com/docs/modules/Blocks.html">
+    Register blocks and block categories for the editor panel.
+  </Card>
+  <Card title="Commands module" icon="terminal" href="https://grapesjs.com/docs/modules/Commands.html">
+    Create reusable, undoable editor commands.
+  </Card>
+</Columns>

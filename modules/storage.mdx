@@ -1,0 +1,344 @@
+---
+title: "Storage Manager: Saving & Loading Projects in GrapesJS"
+description: "Configure local and remote storage, trigger manual store/load calls, implement custom storage adapters, and handle storage events in GrapesJS."
+---
+
+The Storage Manager controls how your project data is persisted between editor sessions. Out of the box GrapesJS writes to `localStorage` and reloads that data on startup, so users never lose their work even if they close the tab. For production use you'll typically switch to the `remote` type and point the module at your own REST API—or write a fully custom storage adapter in just a few lines.
+
+<Note>
+This guide covers GrapesJS v0.19 and later. The storage API changed significantly in that release.
+</Note>
+
+## Configuration
+
+Pass a `storageManager` object to `grapesjs.init()`. Every option has a sensible default.
+
+```javascript
+const editor = grapesjs.init({
+  storageManager: {
+    type: 'local',       // 'local' | 'remote' | any registered type
+    autosave: true,      // automatically store on changes
+    autoload: true,      // load stored data on init
+    stepsBeforeSave: 1,  // changes needed before autosave triggers
+    options: {
+      local:  { key: 'gjsProject' },
+      remote: {
+        urlStore: '',
+        urlLoad: '',
+        headers: {},
+      },
+    },
+  },
+});
+```
+
+To disable persistence entirely:
+
+```javascript
+grapesjs.init({
+  storageManager: false,
+});
+```
+
+<AccordionGroup>
+  <Accordion title="StorageManagerConfig reference">
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `type` | `'local' \| 'remote' \| string` | `'local'` | Active storage type |
+| `autosave` | `boolean` | `true` | Save automatically when changes accumulate |
+| `autoload` | `boolean` | `true` | Load stored data when the editor initialises |
+| `stepsBeforeSave` | `number` | `1` | Changes required to trigger an autosave |
+| `recovery` | `boolean \| Function` | `false` | Fall back to local storage if remote fails |
+| `onStore` | `(data, editor) => data` | identity | Transform data before storing |
+| `onLoad` | `(data, editor) => data` | identity | Transform data after loading |
+| `options.local.key` | `string` | `'gjsProject'` | localStorage key |
+| `options.remote.urlStore` | `string` | `''` | POST endpoint for storing |
+| `options.remote.urlLoad` | `string` | `''` | GET endpoint for loading |
+| `options.remote.headers` | `object` | `{}` | HTTP headers for remote requests |
+
+  </Accordion>
+</AccordionGroup>
+
+## ProjectData structure
+
+`ProjectData` is a plain JSON object that contains everything GrapesJS needs to restore a project—pages (with components and styles), assets, and data sources. It is the canonical serialisation format; never rely on raw HTML/CSS exports as the primary persistence layer.
+
+```javascript
+// Read the current project data
+const projectData = editor.getProjectData();
+// projectData looks like:
+// {
+//   assets: [...],
+//   pages: [
+//     {
+//       id: 'my-page',
+//       name: 'Home',
+//       component: { ... },  // component tree
+//       styles: [...]
+//     }
+//   ],
+//   dataSources: [...]
+// }
+
+// Load it back at any time
+editor.loadProjectData(projectData);
+```
+
+<Warning>
+Only use `projectData` JSON to restore a project in the editor. Loading raw HTML/CSS can work for initial content but strips component metadata, undo history, and other editor-specific information.
+</Warning>
+
+## Local storage
+
+By default GrapesJS stores data with the key `gjsProject`. If your app hosts multiple projects, disambiguate by the project ID.
+
+```javascript
+// Read the project ID from the URL or your application state
+const projectId = getProjectId();
+
+const editor = grapesjs.init({
+  storageManager: {
+    type: 'local',
+    options: {
+      local: { key: `gjsProject-${projectId}` },
+    },
+  },
+});
+```
+
+## Remote storage
+
+<Steps>
+  <Step title="Configure the remote endpoints">
+
+```javascript
+const projectId = 1;
+const projectEndpoint = `https://api.example.com/projects/${projectId}`;
+
+const editor = grapesjs.init({
+  storageManager: {
+    type: 'remote',
+    stepsBeforeSave: 3, // reduce round-trips
+    options: {
+      remote: {
+        urlLoad:  projectEndpoint,
+        urlStore: projectEndpoint,
+        // Adapt the HTTP method if your API expects PATCH instead of POST
+        fetchOptions: (opts) => (opts.method === 'POST' ? { method: 'PATCH' } : {}),
+        // Wrap outgoing data in the API envelope
+        onStore: (data) => ({ id: projectId, data }),
+        // Unwrap the incoming API response
+        onLoad: (result) => result.data,
+      },
+    },
+  },
+});
+```
+
+  </Step>
+  <Step title="Server expectations">
+
+The **Load** endpoint (`GET`) should return the project JSON directly in the response body. Use `options.remote.onLoad` if the response includes extra metadata. The **Store** endpoint (`POST` by default) should return a `200` response. Override `fetchOptions` to change the HTTP method.
+
+  </Step>
+</Steps>
+
+<Warning>
+Configure CORS correctly on your server. Browsers will block cross-origin requests that lack the appropriate `Access-Control-Allow-Origin` headers.
+</Warning>
+
+### Enriching the store call with rendered HTML/CSS
+
+The `onStore` callback receives the editor instance as a second argument, letting you append rendered output to the payload without a separate API call.
+
+```javascript
+grapesjs.init({
+  storageManager: {
+    type: 'remote',
+    options: {
+      remote: {
+        onStore: (data, editor) => {
+          const pagesHtml = editor.Pages.getAll().map((page) => {
+            const component = page.getMainComponent();
+            return {
+              html: editor.getHtml({ component }),
+              css:  editor.getCss({ component }),
+            };
+          });
+          return { id: projectId, data, pagesHtml };
+        },
+        onLoad: (result) => result.data,
+      },
+    },
+  },
+});
+```
+
+## Manual store and load
+
+Trigger persistence on demand regardless of the autosave settings.
+
+```javascript
+// Store and receive the data that was saved
+const stored = await editor.store();
+
+// Load and receive the data that was fetched
+const loaded = await editor.load();
+```
+
+## Skipping the initial load
+
+Provide `projectData` at init time to skip the autoload call—useful when your server renders the project data into the page.
+
+```javascript
+const projectData = window.__PROJECT_DATA__; // injected server-side
+
+grapesjs.init({
+  projectData: projectData || {
+    pages: [{ component: '<div>Initial content</div>' }],
+  },
+  storageManager: {
+    type: 'remote',
+    autoload: false, // skip the GET on startup since we already have data
+  },
+});
+```
+
+## Custom storage adapters
+
+A storage adapter is any object with async `load` and `store` methods. Register it with `editor.Storage.add(type, adapter)`.
+
+<Tabs>
+  <Tab title="Session storage">
+
+```javascript
+const sessionStoragePlugin = (editor) => {
+  editor.Storage.add('session', {
+    async load(options = {}) {
+      return JSON.parse(sessionStorage.getItem(options.key) || '{}');
+    },
+    async store(data, options = {}) {
+      sessionStorage.setItem(options.key, JSON.stringify(data));
+    },
+  });
+};
+
+grapesjs.init({
+  plugins: [sessionStoragePlugin],
+  storageManager: {
+    type: 'session',
+    options: {
+      session: { key: 'myProjectKey' },
+    },
+  },
+});
+```
+
+  </Tab>
+  <Tab title="Axios-based remote">
+
+```javascript
+editor.Storage.add('remote', {
+  async load() {
+    const response = await axios.get(`projects/${projectId}`);
+    return response.data;
+  },
+  async store(data) {
+    await axios.patch(`projects/${projectId}`, { data });
+  },
+});
+```
+
+  </Tab>
+  <Tab title="Inline form storage">
+
+```html
+<form id="my-form">
+  <input id="project-data" type="hidden"
+    value='{"pages":[{"component":"<div>Initial content</div>"}]}' />
+  <div id="gjs"></div>
+  <button type="submit">Submit</button>
+</form>
+
+<script>
+  const inlineStorage = (editor) => {
+    const projectDataEl = document.getElementById('project-data');
+
+    editor.Storage.add('inline', {
+      load() {
+        return JSON.parse(projectDataEl.value || '{}');
+      },
+      store(data) {
+        projectDataEl.value = JSON.stringify(data);
+      },
+    });
+  };
+
+  grapesjs.init({
+    container: '#gjs',
+    plugins: [inlineStorage],
+    storageManager: { type: 'inline' },
+  });
+</script>
+```
+
+  </Tab>
+</Tabs>
+
+### Combining existing adapters
+
+```javascript
+const { Storage } = editor;
+
+Storage.add('remote-with-fallback', {
+  async store(data) {
+    const remote = Storage.get('remote');
+    try {
+      await remote.store(data, Storage.getStorageOptions('remote'));
+    } catch {
+      // Fall back to local on network failure
+      const local = Storage.get('local');
+      await local.store(data, Storage.getStorageOptions('local'));
+    }
+  },
+  async load() {
+    const remote = Storage.get('remote');
+    return remote.load(Storage.getStorageOptions('remote'));
+  },
+});
+```
+
+<Tip>
+Enable `recovery: true` in the storage config to get automatic local fallback and a built-in recovery dialog without writing a custom adapter.
+</Tip>
+
+## Events reference
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `storage:start` | `type` | Any storage request started |
+| `storage:start:store` | `data` | Store request started |
+| `storage:start:load` | — | Load request started |
+| `storage:store` | `data, response` | Project stored successfully |
+| `storage:load` | `data, response` | Project loaded successfully |
+| `storage:after` | — | Request completed (after store/load) |
+| `storage:end` | `type` | Request ended (including errors) |
+| `storage:error` | `err, type` | Any storage error |
+| `storage:error:store` | `err` | Store request failed |
+| `storage:error:load` | `err` | Load request failed |
+
+```javascript
+editor.on('storage:start:store', (data) => {
+  showSavingIndicator();
+});
+
+editor.on('storage:store', (data) => {
+  hideSavingIndicator();
+});
+
+editor.on('storage:error', (err, type) => {
+  console.error(`Storage ${type} error:`, err);
+  showErrorBanner();
+});
+```

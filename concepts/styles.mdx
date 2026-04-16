@@ -1,0 +1,539 @@
+---
+title: "GrapesJS Style Manager: Sectors, Properties, and CSS"
+description: "Configure Style Manager sectors and property types, use built-in CSS props, build custom types, integrate the Selector Manager, and support responsive styling."
+---
+
+The **Style Manager** is the panel that lets users visually edit CSS properties on selected components. It is organized into collapsible **sectors** (groups like "Typography" or "Spacing"), each containing one or more **property** controls. When a user changes a value, the Style Manager updates the component's style rule in real time — both on the canvas and in the exported CSS. Because it is driven by configuration, you have complete control over which properties are exposed, what input widget renders them, and how they map to CSS.
+
+## Configuration
+
+Pass the `styleManager` key to `grapesjs.init()` to configure sectors and properties:
+
+```js
+const editor = grapesjs.init({
+  container: '#gjs',
+  styleManager: {
+    sectors: [
+      // ...sector definitions
+    ],
+  },
+});
+```
+
+Omitting `sectors` loads the built-in defaults, which include common properties for dimensions, typography, decorations, and transforms.
+
+<Note>
+  The Style Manager only renders when at least one component is selected. If no component is selected, the panel is hidden automatically.
+</Note>
+
+---
+
+## Sectors
+
+A **sector** groups related properties under a labelled, collapsible heading. Define it with a `name` and a `properties` array. The `id` is derived from the name if not supplied, and `open` controls the initial expanded state.
+
+```js
+grapesjs.init({
+  styleManager: {
+    sectors: [
+      {
+        id: 'typography',     // Used for API access and i18n
+        name: 'Typography',
+        open: true,           // Expanded by default
+        properties: [
+          'font-family',
+          'font-size',
+          'font-weight',
+          'color',
+          'line-height',
+          'text-align',
+        ],
+      },
+      {
+        id: 'spacing',
+        name: 'Spacing',
+        open: false,          // Collapsed by default
+        properties: [
+          'margin',
+          'padding',
+        ],
+      },
+    ],
+  },
+});
+```
+
+### Checking Built-in Properties
+
+GrapesJS ships with pre-defined property configurations for most common CSS properties. You can pass them as plain strings or extend them:
+
+```js
+properties: [
+  // Use built-in definition as-is
+  'width',
+  'min-width',
+
+  // Extend a built-in definition
+  {
+    extend: 'max-width',
+    units: ['px', '%', 'vw'],
+  },
+
+  // An unknown property falls back to a base text input
+  'my-custom-css-prop',
+]
+```
+
+Check if a built-in exists at runtime:
+
+```js
+const sm = editor.StyleManager;
+
+// Returns the definition or undefined
+sm.getBuiltIn('font-size');
+
+// Returns all built-in property definitions
+sm.getBuiltInAll();
+```
+
+---
+
+## Property Types
+
+Every property definition has a `type` that controls its input widget and value model. The available built-in types are:
+
+<Accordion title="base — simple text input">
+
+Renders a plain text `<input>`. This is the fallback type when `type` is omitted.
+
+```js
+{
+  // type: 'base', // omitting type defaults to 'base'
+  property: 'letter-spacing',
+  label: 'Letter spacing',
+  default: 'normal',
+}
+```
+
+</Accordion>
+
+<Accordion title="color — color picker">
+
+Same options as `base` but renders a color swatch + picker.
+
+```js
+{
+  type: 'color',
+  property: 'background-color',
+  label: 'Background',
+  default: '#ffffff',
+}
+```
+
+</Accordion>
+
+<Accordion title="number — numeric input with units">
+
+```js
+{
+  type: 'number',
+  property: 'font-size',
+  label: 'Font size',
+  default: '1rem',
+  units: ['px', 'em', 'rem', '%', 'vh', 'vw'],
+  min: 0,
+  max: 200,
+}
+```
+
+</Accordion>
+
+<Accordion title="slider — range slider (same model as number)">
+
+```js
+{
+  type: 'slider',
+  property: 'opacity',
+  label: 'Opacity',
+  default: '1',
+  units: [''],
+  min: 0,
+  max: 1,
+}
+```
+
+</Accordion>
+
+<Accordion title="select — dropdown with options">
+
+```js
+{
+  type: 'select',
+  property: 'display',
+  label: 'Display',
+  default: 'block',
+  options: [
+    { id: 'block',        label: 'Block' },
+    { id: 'inline',       label: 'Inline' },
+    { id: 'inline-block', label: 'Inline block' },
+    { id: 'flex',         label: 'Flex' },
+    { id: 'none',         label: 'None' },
+  ],
+}
+```
+
+</Accordion>
+
+<Accordion title="radio — radio buttons (same model as select)">
+
+```js
+{
+  type: 'radio',
+  property: 'text-align',
+  label: 'Align',
+  default: 'left',
+  options: [
+    { id: 'left',    label: 'Left' },
+    { id: 'center',  label: 'Center' },
+    { id: 'right',   label: 'Right' },
+    { id: 'justify', label: 'Justify' },
+  ],
+}
+```
+
+</Accordion>
+
+<Accordion title="composite — CSS shorthand properties">
+
+Groups sub-properties into a single shorthand. Ideal for `margin`, `padding`, `border`, `background`, etc.
+
+```js
+{
+  type: 'composite',
+  property: 'margin',
+  label: 'Margin',
+  properties: [
+    { type: 'number', units: ['px', 'em', '%'], default: '0', property: 'margin-top' },
+    { type: 'number', units: ['px', 'em', '%'], default: '0', property: 'margin-right' },
+    { type: 'number', units: ['px', 'em', '%'], default: '0', property: 'margin-bottom' },
+    { type: 'number', units: ['px', 'em', '%'], default: '0', property: 'margin-left' },
+  ],
+}
+```
+
+</Accordion>
+
+<Accordion title="stack — repeatable layers (box-shadow, transform, etc.)">
+
+Lets users add, remove, and reorder multiple value layers. Each layer exposes its own set of sub-properties.
+
+```js
+{
+  type: 'stack',
+  property: 'box-shadow',
+  label: 'Box shadow',
+  properties: [
+    { type: 'number', units: ['px'], default: '0', property: 'x' },
+    { type: 'number', units: ['px'], default: '0', property: 'y' },
+    { type: 'number', units: ['px'], default: '0', property: 'blur' },
+    { type: 'number', units: ['px'], default: '0', property: 'spread' },
+    { type: 'color',  default: 'black',            property: 'color' },
+  ],
+}
+```
+
+</Accordion>
+
+---
+
+## Selector Manager Integration
+
+By default, when a user selects a component and applies styles, those changes are written to the component's existing CSS classes — meaning all elements sharing those classes are updated together. This is the **class-based** styling model, which is the Style Manager's default.
+
+If you need per-component styling (styles applied to the specific selected element only, not shared with siblings using the same class), enable `componentFirst` in the Selector Manager:
+
+```js
+grapesjs.init({
+  selectorManager: {
+    componentFirst: true,
+  },
+});
+```
+
+You can also target a CSS selector directly via the Style Manager API:
+
+```js
+const sm = editor.StyleManager;
+
+// Target a specific component
+const wrapper = editor.Pages.getSelected().getMainComponent();
+const btn = wrapper.find('button')[0];
+btn && sm.select(btn);
+
+// Or target a CSS selector string (creates the CssRule if it doesn't exist)
+sm.select('.btn > span');
+
+// Inspect current styles
+console.log(sm.getSelected()?.getStyle());
+
+// Apply styles to all current targets
+sm.addStyleTargets({ color: 'red', 'font-weight': 'bold' });
+```
+
+---
+
+## Component Constraints
+
+You can restrict which Style Manager properties are visible when a specific component is selected by using the `stylable` and `unstylable` component properties:
+
+```js
+editor.Components.addType('icon-component', {
+  model: {
+    defaults: {
+      // Show ONLY these properties in the Style Manager
+      stylable: ['color', 'font-size'],
+    },
+  },
+});
+
+editor.Components.addType('readonly-text', {
+  model: {
+    defaults: {
+      // Hide only these properties
+      unstylable: ['color', 'font-family'],
+    },
+  },
+});
+```
+
+If every property in a sector is hidden by constraints, the entire sector is not rendered.
+
+---
+
+## Programmatic API
+
+Manage sectors and properties after initialization using the `editor.StyleManager` API:
+
+```js
+const sm = editor.StyleManager;
+
+// Add a new sector
+sm.addSector('effects', {
+  name: 'Effects',
+  open: true,
+  properties: ['opacity', 'box-shadow', 'filter'],
+});
+
+// Add a property to an existing sector
+sm.addProperty('effects', {
+  type: 'slider',
+  property: 'opacity',
+  label: 'Opacity',
+  default: '1',
+  min: 0,
+  max: 1,
+  units: [''],
+});
+
+// Remove a sector
+sm.removeSector('effects');
+```
+
+### Adding Built-in Property Definitions
+
+Register new built-in property definitions that can then be referenced by name in sector configurations:
+
+```js
+const myPlugin = (editor) => {
+  editor.StyleManager.addBuiltIn('backdrop-filter', {
+    type: 'select',
+    label: 'Backdrop filter',
+    options: [
+      { id: 'none',         label: 'None' },
+      { id: 'blur(4px)',    label: 'Blur' },
+      { id: 'grayscale(1)', label: 'Grayscale' },
+    ],
+  });
+};
+
+grapesjs.init({
+  plugins: [myPlugin],
+  styleManager: {
+    sectors: [
+      { name: 'Effects', properties: ['backdrop-filter', 'opacity'] },
+    ],
+  },
+});
+```
+
+---
+
+## Custom Property Types
+
+When the built-in types do not cover your use case (e.g. a custom gradient picker or a token selector), you can register a completely new type with `styleManager.addType`:
+
+```js
+const customTypePlugin = (editor) => {
+  editor.StyleManager.addType('my-custom-prop', {
+    // Create the UI element
+    create({ props, change }) {
+      const el = document.createElement('div');
+      el.innerHTML = `<input
+        type="range"
+        class="my-range"
+        min="${props.min}"
+        max="${props.max}"
+      />`;
+      const input = el.querySelector('.my-range');
+      input.addEventListener('change', (event) => change({ event }));
+      input.addEventListener('input',  (event) => change({ event, partial: true }));
+      return el;
+    },
+
+    // Propagate UI changes to the selected component's style
+    emit({ props, updateStyle }, { event, partial }) {
+      updateStyle(`${event.target.value}px`, { partial });
+    },
+
+    // Sync UI when the selected target changes
+    update({ value, el }) {
+      el.querySelector('.my-range').value = parseInt(value, 10);
+    },
+
+    // Clean up side effects
+    destroy() {},
+  });
+};
+
+grapesjs.init({
+  plugins: [customTypePlugin],
+  styleManager: {
+    sectors: [
+      {
+        name: 'Custom',
+        properties: [
+          {
+            type: 'my-custom-prop',
+            property: 'font-size',
+            label: 'Font size (slider)',
+            default: '15',
+            min: 10,
+            max: 70,
+          },
+        ],
+      },
+    ],
+  },
+});
+```
+
+---
+
+## Responsive Styling and Media Queries
+
+GrapesJS stores styles as `CssRule` objects that include an optional media query. The Device Manager changes the active device which triggers different style rules to apply. You can inspect and apply media-query-scoped styles directly:
+
+```js
+const sm = editor.StyleManager;
+const lastTarget = sm.getLastSelected();
+
+// Check the current CSS for a target (includes media queries)
+lastTarget?.toCSS && console.log(lastTarget.toCSS());
+
+// Add styles that will be stored under the current media query context
+sm.addStyleTargets({ 'font-size': '14px' });
+```
+
+To build a responsive-first editor, configure sectors to match your breakpoints and pair them with the Device Manager:
+
+```js
+grapesjs.init({
+  deviceManager: {
+    devices: [
+      { name: 'Desktop', width: '' },
+      { name: 'Tablet',  width: '768px', widthMedia: '768px' },
+      { name: 'Mobile',  width: '320px', widthMedia: '480px' },
+    ],
+  },
+  styleManager: {
+    sectors: [
+      { name: 'Layout', properties: ['display', 'width', 'height', 'flex-direction'] },
+      { name: 'Typography', properties: ['font-size', 'line-height'] },
+    ],
+  },
+});
+```
+
+---
+
+## Internationalization
+
+Sector names and property labels can be translated by connecting them to the I18n module via their IDs:
+
+```js
+grapesjs.init({
+  styleManager: {
+    sectors: [
+      {
+        id: 'typography',
+        name: 'Typography', // Used as fallback when i18n key is missing
+        properties: [
+          { id: 'display-prop', property: 'display', type: 'select',
+            options: [
+              { id: 'block', label: 'Block' },
+              { id: 'flex',  label: 'Flex' },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  i18n: {
+    messagesAdd: {
+      en: {
+        styleManager: {
+          sectors:    { typography: 'Typography EN' },
+          properties: { 'display-prop': 'Display EN' },
+          options:    { 'display-prop': { block: 'Block EN', flex: 'Flex EN' } },
+        },
+      },
+    },
+  },
+});
+```
+
+---
+
+## Custom Style Manager UI
+
+For a fully bespoke panel, set `custom: true` and subscribe to the `style:custom` event. GrapesJS will call your handler whenever the selected target changes or styles are updated:
+
+```js
+const editor = grapesjs.init({
+  styleManager: { custom: true },
+});
+
+editor.on('style:custom', ({ container }) => {
+  // `container` is the default HTMLElement mount point.
+  // Build/update your UI here using editor.StyleManager APIs.
+  const sm = editor.StyleManager;
+  const sectors = sm.getSectors({ visible: true });
+  renderCustomUI(container, sectors);
+});
+```
+
+---
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Components" href="/concepts/components">
+    Learn how components use `stylable` and `unstylable` to constrain the Style Manager.
+  </Card>
+  <Card title="Blocks" href="/concepts/blocks">
+    Best practices for keeping styles in components, not in block content.
+  </Card>
+  <Card title="Canvas" href="/concepts/canvas">
+    How the Device Manager drives responsive previews and media query scoping.
+  </Card>
+</CardGroup>

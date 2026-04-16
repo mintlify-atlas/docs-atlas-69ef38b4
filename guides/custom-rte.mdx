@@ -1,0 +1,239 @@
+---
+title: "Replace the Built-in Rich Text Editor in GrapesJS"
+description: "Integrate any third-party text editor — such as Quill or TipTap — by implementing the CustomRTE interface and registering it with GrapesJS."
+---
+
+GrapesJS ships with a minimal built-in Rich Text Editor (RTE) that covers basic formatting: bold, italic, underline, strikethrough, links, and wrapping. For many builder use cases, a more capable editor is needed — one with tables, custom fonts, inline images, or a polished toolbar. GrapesJS lets you replace the entire RTE with any third-party library by implementing a small interface and registering it via `editor.setCustomRte()`. Popular choices in the community include [Quill](https://quilljs.com/) and [TipTap](https://tiptap.dev/), though any library with a programmatic API will work.
+
+<Note>
+  This API requires GrapesJS v0.21.2 or higher.
+</Note>
+
+## The `CustomRTE` interface
+
+The full interface, from `rich_text_editor/config/config.ts`:
+
+```typescript
+export interface CustomRteOptions {
+  event?: MouseEvent;
+  view: ComponentTextView;
+}
+
+export interface CustomRTE<T = any> {
+  /**
+   * If true, the returned HTML content will be parsed into Components, allowing
+   * the custom RTE to behave in the same way as the native one.
+   * If false, the HTML content will be used as it is in the canvas and the export code.
+   */
+  parseContent?: boolean;
+  /**
+   * Create or enable the custom RTE.
+   */
+  enable: (el: HTMLElement, rte: T | undefined, opts: CustomRteOptions) => T | Promise<T>;
+  /**
+   * Disable the custom RTE.
+   */
+  disable: (el: HTMLElement, rte: T, opts: CustomRteOptions) => any | Promise<any>;
+  /**
+   * Get HTML content from the custom RTE.
+   * If not specified, it will use the innerHTML of the element.
+   */
+  getContent?: (el: HTMLElement, rte: T | undefined, opts: CustomRteOptions) => string | Promise<string>;
+  /**
+   * Destroy the custom RTE.
+   * Will be triggered on editor destroy.
+   */
+  destroy?: () => void;
+
+  [key: string]: unknown;
+}
+```
+
+`enable` and `disable` are required. Everything else is optional.
+
+## Required methods
+
+### `enable(el, rte, opts)`
+
+Called when the user double-clicks a text component to begin editing. `el` is the DOM element being edited. `rte` is the instance previously returned by `enable()`, or `undefined` on the first call for this element. You must return the initialized editor instance — GrapesJS stores it and passes it back on future calls.
+
+```js
+// IMPORTANT: place the code in a new plugin
+const customRTE = (editor) => {
+  const focus = (el, rte) => {
+    // implemented below
+  };
+
+  editor.setCustomRte({
+    enable(el, rte) {
+      // If already initialized, just re-focus
+      if (rte) {
+        focus(el, rte);
+        return rte;
+      }
+
+      // First-time initialization with your chosen library.
+      // This example uses CKEditor as a reference pattern.
+      rte = CKEDITOR.inline(el, {
+        toolbar: [
+          /* your toolbar config */
+        ],
+        // Move the toolbar inside GrapesJS's RTE toolbar container
+        // so it stays in view when the canvas is scrolled.
+        sharedSpaces: {
+          top: editor.RichTextEditor.getToolbarEl(),
+        },
+      });
+
+      focus(el, rte);
+      return rte;
+    },
+  });
+};
+
+const editor = grapesjs.init({
+  // ...
+  plugins: [customRTE],
+});
+```
+
+### `disable(el, rte, opts)`
+
+Called when the user clicks outside the text component or selects something else. Use this to blur or teardown the editor for that element.
+
+```js
+editor.setCustomRte({
+  // ...
+  disable(el, rte) {
+    el.contentEditable = false;
+    rte?.focusManager?.blur(true);
+  },
+});
+```
+
+## Optional methods
+
+### `getContent(el, rte, opts)`
+
+By default, GrapesJS reads `el.innerHTML` as the final HTML output. Many editors maintain their own internal state that diverges from the live DOM — call your library's serialization method here to return the canonical output.
+
+```js
+editor.setCustomRte({
+  // ...
+  getContent(el, rte) {
+    // Replace getData() with whatever your library's serialization method is
+    return rte.getData();
+  },
+});
+```
+
+### `destroy()`
+
+Called when the GrapesJS editor itself is destroyed. Use this to clean up any global state your library registered.
+
+```js
+editor.setCustomRte({
+  // ...
+  destroy() {
+    // e.g. remove global event listeners, destroy singleton instances
+  },
+});
+```
+
+### `parseContent`
+
+Set `parseContent: true` to have GrapesJS parse the HTML returned by `getContent` into its component model. This makes the custom RTE behave more like the native one and enables features like textable components.
+
+```js
+editor.setCustomRte({
+  // ...
+  parseContent: true,
+});
+```
+
+## Focus helper pattern
+
+A common pattern is to separate the focus logic from `enable()` so both initial activation and subsequent re-focuses use the same path:
+
+```js
+const focus = (el, rte) => {
+  // Do nothing if already focused
+  if (rte?.focusManager?.hasFocus) {
+    return;
+  }
+  el.contentEditable = true;
+  rte?.focus();
+};
+
+editor.setCustomRte({
+  enable(el, rte) {
+    if (rte) {
+      focus(el, rte);
+      return rte;
+    }
+    // ... initialize editor ...
+    focus(el, rte);
+    return rte;
+  },
+});
+```
+
+## Toolbar positioning
+
+By default, the RTE toolbar appears at the top-left of the selected component. When the user scrolls the canvas far enough that the component reaches the top edge of the viewport, you may want to push the toolbar downward so it remains visible. Listen for `rteToolbarPosUpdate` and update `pos.top` or `pos.left` accordingly:
+
+```js
+editor.on('rteToolbarPosUpdate', (pos) => {
+  // pos contains position data and canvas scroll state.
+  // Adjust pos.top / pos.left as needed for your layout.
+});
+```
+
+## Integrating with a third-party editor
+
+<Steps>
+  <Step title="Choose your library">
+    Popular options for rich text editing in JavaScript are [Quill](https://quilljs.com/) and [TipTap](https://tiptap.dev/). Both provide programmatic APIs for initialization, focus management, and content serialization — the three things GrapesJS needs from your integration.
+  </Step>
+  <Step title="Wrap initialization in a plugin">
+    Place your `editor.setCustomRte(...)` call inside a GrapesJS plugin function so it has access to the editor instance. Register the plugin via the `plugins` init option.
+
+    ```js
+    const myRtePlugin = (editor) => {
+      editor.setCustomRte({
+        enable(el, rte) { /* ... */ },
+        disable(el, rte) { /* ... */ },
+        getContent(el, rte) { /* ... */ },
+      });
+    };
+
+    grapesjs.init({
+      container: '#gjs',
+      plugins: [myRtePlugin],
+    });
+    ```
+
+  </Step>
+  <Step title="Handle the toolbar container">
+    Most inline editors attach their toolbar directly to the page. Inside the GrapesJS canvas this can cause the toolbar to scroll out of view. Where supported, use your library's API to mount the toolbar inside `editor.RichTextEditor.getToolbarEl()` — a container GrapesJS provides specifically for this purpose.
+  </Step>
+  <Step title="Implement getContent">
+    Read your library's documentation to find its HTML serialization method. Set it as `getContent` to ensure the value GrapesJS stores matches the editor's canonical output, not just the live DOM state.
+  </Step>
+</Steps>
+
+## Built-in vs. custom RTE behavior
+
+When you use a custom RTE, GrapesJS stores whatever HTML your `getContent` function returns and treats it as a raw string. This is different from the native RTE:
+
+- **Link editing** — the built-in RTE shows component settings for links you click inside text. With a custom RTE, link editing is entirely the library's responsibility.
+- **Component model** — unless `parseContent: true` is set, the content is stored as a plain HTML string rather than a component tree.
+- **Native text features** — the built-in RTE respects GrapesJS's textable component APIs. Custom RTEs interact with GrapesJS at the HTML string level unless `parseContent` is enabled.
+
+<Warning>
+  Each third-party library has its own quirks and limitations. Read your library's documentation carefully, especially around inline editing mode and how it handles `contenteditable` elements.
+</Warning>
+
+## Available plugins
+
+For CKEditor, a complete ready-to-use plugin is available at [grapesjs-plugin-ckeditor](https://github.com/GrapesJS/ckeditor). Its source is a good reference implementation for any custom RTE integration.

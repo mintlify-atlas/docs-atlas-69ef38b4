@@ -1,0 +1,392 @@
+---
+title: "Getting Started: Build a GrapesJS Editor from Scratch"
+description: "Install GrapesJS and build a fully functional page builder with blocks, panels, style manager, and storage in a step-by-step walkthrough."
+---
+
+This guide walks through building a complete page builder with GrapesJS — from installation to a working editor with drag-and-drop blocks, custom panels, a style manager, and persistent storage. Each step builds on the previous one. By the end you will have a functional builder you can extend with your own blocks, component types, and plugins.
+
+<Steps>
+
+<Step title="Install GrapesJS">
+
+GrapesJS is available on npm as `grapesjs` (version 0.22.15 at the time of writing). Install it alongside its stylesheet:
+
+<CodeGroup>
+
+```bash npm
+npm install grapesjs
+```
+
+```bash yarn
+yarn add grapesjs
+```
+
+```bash pnpm
+pnpm add grapesjs
+```
+
+</CodeGroup>
+
+Then import the package and its CSS in your entry file:
+
+```javascript main.js
+import 'grapesjs/dist/css/grapes.min.css';
+import grapesjs from 'grapesjs';
+```
+
+Alternatively, load GrapesJS directly from a CDN without a build step:
+
+```html index.html
+<link rel="stylesheet" href="//unpkg.com/grapesjs/dist/css/grapes.min.css" />
+<script src="//unpkg.com/grapesjs"></script>
+```
+
+<Tip>
+  When using the CDN build, `grapesjs` is available as a global variable on `window`. In an ES module context, use the named import shown above.
+</Tip>
+
+</Step>
+
+<Step title="Set up the HTML container">
+
+GrapesJS renders into a container element you provide. Add a `div` to your page and give it an `id` you will pass to `grapesjs.init()`:
+
+```html index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="//unpkg.com/grapesjs/dist/css/grapes.min.css" />
+    <style>
+      body { margin: 0; }
+      #gjs { border: 3px solid #444; }
+    </style>
+  </head>
+  <body>
+    <div id="gjs">
+      <h1>Hello World Component!</h1>
+    </div>
+    <script src="//unpkg.com/grapesjs"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
+```
+
+Any HTML already inside the container is parsed into GrapesJS components when the editor initializes.
+
+</Step>
+
+<Step title="Initialize the editor">
+
+Call `grapesjs.init()` with a configuration object. The only required option is `container` — a CSS selector string or an `HTMLElement`.
+
+```javascript main.js
+const editor = grapesjs.init({
+  container: '#gjs',
+  height: '100vh',
+  width: '100%',
+  // Persist state in localStorage by default
+  storageManager: {
+    type: 'local',
+    autosave: true,
+    autoload: true,
+    stepsBeforeSave: 1,
+  },
+  // Show notices before leaving page with unsaved changes
+  noticeOnUnload: true,
+});
+```
+
+`grapesjs.init()` returns an `Editor` instance. Hold a reference to it — you will use it to add panels, commands, and event listeners throughout this guide.
+
+<Note>
+  `autorender` defaults to `true`, so the editor renders immediately. Set `autorender: false` if you need to delay rendering until after you've configured additional modules.
+</Note>
+
+</Step>
+
+<Step title="Add blocks">
+
+Blocks are the drag sources your users pull from the sidebar onto the canvas. Define them in the `blockManager.blocks` array inside `init()`, or add them dynamically with `editor.BlockManager.add()`.
+
+First, add a container for the block panel in your HTML:
+
+```html index.html
+<div id="gjs">...</div>
+<div id="blocks"></div>
+```
+
+Then configure the Block Manager:
+
+```javascript main.js
+const editor = grapesjs.init({
+  container: '#gjs',
+  // ...
+  blockManager: {
+    appendTo: '#blocks',
+    blocks: [
+      {
+        id: 'section',
+        label: '<b>Section</b>',
+        attributes: { class: 'gjs-block-section' },
+        content: `<section>
+          <h1>This is a simple title</h1>
+          <div>This is just a Lorem text: Lorem ipsum dolor sit amet</div>
+        </section>`,
+      },
+      {
+        id: 'text',
+        label: 'Text',
+        content: '<div data-gjs-type="text">Insert your text here</div>',
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        select: true,
+        content: { type: 'image' },
+        activate: true,
+      },
+    ],
+  },
+});
+```
+
+You can also add blocks dynamically after initialization:
+
+```javascript main.js
+editor.BlockManager.add('my-block', {
+  label: 'My Block',
+  category: 'Basic',
+  content: '<div class="my-block">Custom block content</div>',
+});
+```
+
+</Step>
+
+<Step title="Add panels and buttons">
+
+GrapesJS ships with no default panel layout. You define panels using `editor.Panels.addPanel()` and attach them to DOM elements you create. Buttons inside panels trigger named commands.
+
+Add the panel containers to your HTML:
+
+```html index.html
+<div class="panel__top">
+  <div class="panel__basic-actions"></div>
+</div>
+<div id="gjs">...</div>
+<div id="blocks"></div>
+```
+
+Then wire up the panels in JavaScript:
+
+```javascript main.js
+editor.Panels.addPanel({
+  id: 'panel-top',
+  el: '.panel__top',
+});
+
+editor.Panels.addPanel({
+  id: 'basic-actions',
+  el: '.panel__basic-actions',
+  buttons: [
+    {
+      id: 'visibility',
+      active: true,
+      className: 'btn-toggle-borders',
+      label: '<u>B</u>',
+      command: 'sw-visibility', // Built-in command
+    },
+    {
+      id: 'export',
+      className: 'btn-open-export',
+      label: 'Exp',
+      command: 'export-template',
+      context: 'export-template',
+    },
+    {
+      id: 'show-json',
+      className: 'btn-show-json',
+      label: 'JSON',
+      command(editor) {
+        editor.Modal.setTitle('Components JSON')
+          .setContent(
+            `<textarea style="width:100%; height: 250px;">
+              ${JSON.stringify(editor.getComponents())}
+            </textarea>`,
+          )
+          .open();
+      },
+    },
+  ],
+});
+```
+
+The `command` property accepts a built-in command ID string, an object with `run` and `stop` methods, or an inline function.
+
+</Step>
+
+<Step title="Configure the Style Manager">
+
+The Style Manager lets users visually edit CSS properties on selected components. It is organized into sectors, each containing CSS property inputs. Use `buildProps` to include built-in property definitions, and `properties` to override or extend them.
+
+Add a styles container to your HTML:
+
+```html index.html
+<div class="panel__right">
+  <div class="styles-container"></div>
+</div>
+```
+
+Then configure `styleManager` and `selectorManager` in `init()`:
+
+```javascript main.js
+const editor = grapesjs.init({
+  container: '#gjs',
+  // ...
+  selectorManager: {
+    appendTo: '.styles-container',
+  },
+  styleManager: {
+    appendTo: '.styles-container',
+    sectors: [
+      {
+        name: 'Dimension',
+        open: false,
+        buildProps: ['width', 'min-height', 'padding'],
+        properties: [
+          {
+            type: 'integer',
+            name: 'Width',
+            property: 'width',
+            units: ['px', '%'],
+            defaults: 'auto',
+            min: 0,
+          },
+        ],
+      },
+      {
+        name: 'Typography',
+        open: false,
+        buildProps: ['font-family', 'font-size', 'font-weight', 'color'],
+      },
+      {
+        name: 'Decorations',
+        open: false,
+        buildProps: ['background-color', 'border-radius', 'box-shadow'],
+      },
+    ],
+  },
+});
+```
+
+`buildProps` references [built-in property definitions](https://grapesjs.com/docs/modules/Style-manager.html#built-in-properties). The `selectorManager` surfaces the class selector interface above the style properties panel.
+
+</Step>
+
+<Step title="Configure storage">
+
+GrapesJS ships with two storage adapters: `local` (localStorage) and `remote` (HTTP). The storage manager serializes the full project state — components, styles, and pages — and saves/loads it via the configured adapter.
+
+**Local storage** (default):
+
+```javascript main.js
+grapesjs.init({
+  container: '#gjs',
+  storageManager: {
+    type: 'local',
+    autosave: true,
+    autoload: true,
+    stepsBeforeSave: 1,
+    options: {
+      local: {
+        key: 'gjsProject', // localStorage key
+      },
+    },
+  },
+});
+```
+
+**Remote storage** (HTTP endpoints):
+
+```javascript main.js
+grapesjs.init({
+  container: '#gjs',
+  storageManager: {
+    type: 'remote',
+    autosave: true,
+    autoload: true,
+    stepsBeforeSave: 10,
+    options: {
+      remote: {
+        headers: {
+          Authorization: 'Bearer YOUR_TOKEN',
+        },
+        urlStore: 'https://your-server/api/project/store',
+        urlLoad: 'https://your-server/api/project/load',
+      },
+    },
+  },
+});
+```
+
+To trigger saves manually instead of on a timer, disable `autosave` and call `editor.store()`:
+
+```javascript main.js
+grapesjs.init({
+  container: '#gjs',
+  storageManager: {
+    type: 'remote',
+    autosave: false,
+  },
+  commands: {
+    defaults: [
+      {
+        id: 'store-data',
+        run(editor) {
+          editor.store();
+        },
+      },
+    ],
+  },
+});
+```
+
+</Step>
+
+</Steps>
+
+## Exporting HTML and CSS
+
+At any point you can retrieve the current editor state as HTML and CSS strings:
+
+```javascript main.js
+const html = editor.getHtml();
+const css = editor.getCss();
+
+console.log(html); // <div>...</div>
+console.log(css);  // .class { color: red; } ...
+```
+
+To get the full project data as JSON (suitable for storing to a backend or passing to `projectData` on next init):
+
+```javascript main.js
+const projectData = editor.getProjectData();
+// Later, restore it:
+editor.loadProjectData(projectData);
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration reference" icon="gear" href="/configuration">
+    Full reference for every EditorConfig option with types, defaults, and descriptions.
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/concepts/components">
+    Define custom component types with their own models, views, and traits.
+  </Card>
+  <Card title="Blocks" icon="table-cells" href="/concepts/blocks">
+    Go deeper on block categories, custom block UIs, and dynamic block registration.
+  </Card>
+  <Card title="Storage module" icon="floppy-disk" href="/modules/storage">
+    Learn about custom storage adapters, multi-page projects, and data migration.
+  </Card>
+</CardGroup>

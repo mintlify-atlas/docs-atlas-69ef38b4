@@ -1,0 +1,508 @@
+---
+title: "Style Manager API: Sectors, Properties & Targets"
+description: "Full reference for the GrapesJS Style Manager — add sectors and CSS properties, select style targets, use built-in property types, and listen to style events."
+---
+
+The Style Manager organises CSS properties into collapsible groups called **sectors** (e.g., Typography, Spacing, Background). Each sector holds one or more **properties** — UI controls mapped to individual CSS attributes. When a component or CSS rule is selected, the Style Manager reflects its current style and propagates any user edits back to the canvas in real time. Access it through `editor.StyleManager`.
+
+## Sectors
+
+### addSector
+
+```typescript
+addSector(
+  id: string,
+  sector: SectorProperties,
+  options?: AddOptions
+): Sector
+```
+
+Adds a new sector to the Style Manager. If a sector with the same `id` already exists, that existing sector is returned unchanged.
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the sector, e.g. `'typography'`.
+</ParamField>
+
+<ParamField path="sector" type="SectorProperties" required>
+  Sector definition.
+
+  <Expandable title="SectorProperties">
+    <ParamField path="name" type="string" required>Display name shown in the UI, e.g. `'Typography'`.</ParamField>
+    <ParamField path="open" type="boolean">Whether the sector starts expanded. Default `true`.</ParamField>
+    <ParamField path="visible" type="boolean">Whether the sector is visible. Default `true`.</ParamField>
+    <ParamField path="buildProps" type="string[]">Array of built-in CSS property names to automatically populate the sector (e.g. `['font-size', 'color']`).</ParamField>
+    <ParamField path="properties" type="PropertyTypes[]">Explicit property definitions array. Used when not using `buildProps`.</ParamField>
+    <ParamField path="extendBuilded" type="boolean">When using `buildProps`, whether to merge your overrides on top of the built-in definitions. Default `true`.</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="AddOptions">
+  Collection add options. Use `{ at: 0 }` to insert at the beginning of the sector list.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const sector = editor.StyleManager.addSector('custom-effects', {
+  name: 'Custom Effects',
+  open: false,
+  properties: [
+    { property: 'opacity', type: 'slider', default: '1', min: 0, max: 1, step: 0.01 },
+  ],
+}, { at: 0 });
+```
+```javascript JavaScript
+const sector = editor.StyleManager.addSector('custom-effects', {
+  name: 'Custom Effects',
+  open: false,
+  properties: [
+    { property: 'opacity', type: 'slider', default: '1', min: 0, max: 1, step: 0.01 },
+  ],
+}, { at: 0 });
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Sector">
+  The added (or pre-existing) sector instance.
+</ResponseField>
+
+---
+
+### getSector
+
+```typescript
+getSector(id: string): Sector | null
+```
+
+Retrieves a sector by its ID, returning `null` if not found.
+
+<ParamField path="id" type="string" required>Sector ID.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const typography = editor.StyleManager.getSector('typography');
+if (typography) {
+  console.log(typography.getName());
+}
+```
+```javascript JavaScript
+const typography = editor.StyleManager.getSector('typography');
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Sector | null" />
+
+---
+
+### getSectors
+
+```typescript
+getSectors(opts?: { array?: boolean; visible?: boolean }): Sectors | Sector[]
+```
+
+Returns all sectors. Pass `{ array: true }` to get a plain array; pass `{ visible: true }` to filter only sectors that are currently visible.
+
+<ParamField path="opts" type="object">
+  <Expandable title="options">
+    <ParamField path="array" type="boolean">Return a plain `Sector[]` array instead of the Backbone `Sectors` collection.</ParamField>
+    <ParamField path="visible" type="boolean">Filter to only visible sectors.</ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const sectors = editor.StyleManager.getSectors({ array: true });
+sectors.forEach((s) => console.log(s.getId(), s.isOpen()));
+```
+```javascript JavaScript
+const sectors = editor.StyleManager.getSectors({ array: true });
+```
+</CodeGroup>
+
+---
+
+### removeSector
+
+```typescript
+removeSector(id: string): Sector
+```
+
+Removes the sector with the given ID from the Style Manager.
+
+<ParamField path="id" type="string" required>Sector ID to remove.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const removed = editor.StyleManager.removeSector('decorations');
+```
+```javascript JavaScript
+editor.StyleManager.removeSector('decorations');
+```
+</CodeGroup>
+
+---
+
+## Properties
+
+### addProperty
+
+```typescript
+addProperty(
+  sectorId: string,
+  property: PropertyTypes,
+  opts?: AddOptions
+): Property | undefined
+```
+
+Adds a new CSS property control to an existing sector. Returns `undefined` if the sector does not exist.
+
+<ParamField path="sectorId" type="string" required>ID of the target sector.</ParamField>
+
+<ParamField path="property" type="PropertyTypes" required>
+  Property definition. The `type` field controls which UI widget is rendered.
+
+  <Expandable title="Common property fields">
+    <ParamField path="property" type="string">CSS property name, e.g. `'min-height'`.</ParamField>
+    <ParamField path="label" type="string">Label shown in the UI, e.g. `'Min Height'`.</ParamField>
+    <ParamField path="type" type="string">Widget type: `'integer'`, `'radio'`, `'select'`, `'color'`, `'slider'`, `'file'`, `'composite'`, or `'stack'`.</ParamField>
+    <ParamField path="default" type="string">Default CSS value, e.g. `'100px'`.</ParamField>
+    <ParamField path="options" type="array">For `select` and `radio` types, an array of `{ id, label }` objects.</ParamField>
+    <ParamField path="units" type="string[]">For `integer` type, an array of allowed CSS units, e.g. `['px', 'rem', '%']`.</ParamField>
+    <ParamField path="min" type="number">Minimum value for numeric types.</ParamField>
+    <ParamField path="max" type="number">Maximum value for numeric types.</ParamField>
+    <ParamField path="step" type="number">Step increment for numeric types.</ParamField>
+    <ParamField path="properties" type="PropertyTypes[]">Sub-properties for `composite` and `stack` types.</ParamField>
+    <ParamField path="full" type="boolean">Force the property to take up the full panel width.</ParamField>
+    <ParamField path="important" type="boolean">Append `!important` to the generated value.</ParamField>
+    <ParamField path="isVisible" type="Function">Custom function `({ property, sector, target, component }) => boolean` to conditionally hide the property.</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="opts" type="AddOptions">
+  Collection add options (e.g., `{ at: 0 }` for index).
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const prop = editor.StyleManager.addProperty('spacing', {
+  label: 'Minimum Height',
+  property: 'min-height',
+  type: 'select',
+  default: '100px',
+  options: [
+    { id: '100px', label: '100px' },
+    { id: '200px', label: '200px' },
+    { id: '50vh', label: '50vh' },
+  ],
+}, { at: 0 });
+```
+```javascript JavaScript
+const prop = editor.StyleManager.addProperty('spacing', {
+  label: 'Minimum Height',
+  property: 'min-height',
+  type: 'select',
+  default: '100px',
+  options: [
+    { id: '100px', label: '100px' },
+    { id: '200px', label: '200px' },
+    { id: '50vh', label: '50vh' },
+  ],
+}, { at: 0 });
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Property | undefined">
+  The added Property instance, or `undefined` if the sector was not found.
+</ResponseField>
+
+---
+
+### getProperty
+
+```typescript
+getProperty(sectorId: string, id: string): Property | undefined
+```
+
+Returns a single property from a sector, matched by its `id` or `property` (CSS name).
+
+<ParamField path="sectorId" type="string" required>Sector ID.</ParamField>
+<ParamField path="id" type="string" required>Property ID or CSS property name (e.g. `'min-height'`).</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const colorProp = editor.StyleManager.getProperty('typography', 'color');
+colorProp?.set('label', 'Text Color');
+```
+```javascript JavaScript
+const colorProp = editor.StyleManager.getProperty('typography', 'color');
+```
+</CodeGroup>
+
+---
+
+### getProperties
+
+```typescript
+getProperties(sectorId: string): Collection<Property> | undefined
+```
+
+Returns the full properties collection for a sector, or `undefined` if the sector is not found.
+
+<ParamField path="sectorId" type="string" required>Sector ID.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const props = editor.StyleManager.getProperties('typography');
+props?.forEach((p) => console.log(p.getName()));
+```
+```javascript JavaScript
+const props = editor.StyleManager.getProperties('typography');
+```
+</CodeGroup>
+
+---
+
+### removeProperty
+
+```typescript
+removeProperty(sectorId: string, id: string): Property | null
+```
+
+Removes a property from a sector by its `id` or CSS property name.
+
+<ParamField path="sectorId" type="string" required>Sector ID.</ParamField>
+<ParamField path="id" type="string" required>Property ID or CSS name to remove.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.StyleManager.removeProperty('typography', 'text-decoration');
+```
+```javascript JavaScript
+editor.StyleManager.removeProperty('typography', 'text-decoration');
+```
+</CodeGroup>
+
+---
+
+## Targets
+
+### getSelected
+
+```typescript
+getSelected(): StyleTarget | undefined
+```
+
+Returns the last selected style target — the component or CSS rule whose styles are currently reflected in the Style Manager.
+
+<CodeGroup>
+```typescript TypeScript
+const target = editor.StyleManager.getSelected();
+if (target) {
+  const style = target.getStyle();
+  console.log(style);
+}
+```
+```javascript JavaScript
+const target = editor.StyleManager.getSelected();
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Component | CssRule | undefined">
+  The active style target.
+</ResponseField>
+
+---
+
+### getSelectedAll
+
+```typescript
+getSelectedAll(): StyleTarget[]
+```
+
+Returns all currently selected style targets. Useful in multi-selection scenarios.
+
+<CodeGroup>
+```typescript TypeScript
+const targets = editor.StyleManager.getSelectedAll();
+targets.forEach((t) => t.addStyle({ color: 'red' }));
+```
+```javascript JavaScript
+editor.StyleManager.getSelectedAll().forEach((t) => t.addStyle({ color: 'red' }));
+```
+</CodeGroup>
+
+---
+
+### getSelectedParents
+
+```typescript
+getSelectedParents(): CssRule[]
+```
+
+Returns parent CSS rules of the last selected target. These represent inherited or cascaded styles that apply to the target but are not directly set on it.
+
+<CodeGroup>
+```typescript TypeScript
+const parentRules = editor.StyleManager.getSelectedParents();
+parentRules.forEach((rule) => console.log(rule.toCSS()));
+```
+```javascript JavaScript
+const parentRules = editor.StyleManager.getSelectedParents();
+```
+</CodeGroup>
+
+---
+
+## Built-in Property Types
+
+GrapesJS ships with eight built-in property widget types. Use the `type` field in your property definition to select one.
+
+| Type | Description | Key options |
+|---|---|---|
+| `integer` | Numeric input with unit selector | `units`, `min`, `max`, `step` |
+| `radio` | Radio button group | `options: [{ id, label }]` |
+| `select` | Dropdown select | `options: [{ id, label }]` |
+| `color` | Color picker | — |
+| `slider` | Range slider | `min`, `max`, `step` |
+| `file` | File / image URL input | — |
+| `composite` | Group of sub-properties rendered as a single block | `properties: []` |
+| `stack` | Repeatable list of sub-property groups (e.g. box-shadow layers) | `properties: []` |
+
+You can also register custom types with `addType`.
+
+### addType (custom property widget)
+
+```typescript
+addType<T>(id: string, definition: CustomPropertyView<T>): void
+```
+
+Registers a completely custom property UI widget. The definition must implement `create`, `emit`, `update`, and optionally `destroy`.
+
+<CodeGroup>
+```typescript TypeScript
+editor.StyleManager.addType('my-range', {
+  create({ props, change }) {
+    const el = document.createElement('div');
+    el.innerHTML = '<input type="range" class="my-input" min="10" max="50" />';
+    const input = el.querySelector<HTMLInputElement>('.my-input')!;
+    input.addEventListener('change', (event) => change({ event }));
+    input.addEventListener('input', (event) => change({ event, partial: true }));
+    return el;
+  },
+  emit({ props, updateStyle }, { event, partial }) {
+    const value = (event.target as HTMLInputElement).value;
+    updateStyle(`${value}px`, { partial });
+  },
+  update({ value, el }) {
+    const input = el.querySelector<HTMLInputElement>('.my-input')!;
+    input.value = String(parseInt(value, 10));
+  },
+  destroy() {
+    // clean up global event listeners here
+  },
+});
+```
+```javascript JavaScript
+editor.StyleManager.addType('my-range', {
+  create({ props, change }) {
+    const el = document.createElement('div');
+    el.innerHTML = '<input type="range" class="my-input" min="10" max="50" />';
+    const input = el.querySelector('.my-input');
+    input.addEventListener('change', (event) => change({ event }));
+    input.addEventListener('input', (event) => change({ event, partial: true }));
+    return el;
+  },
+  emit({ props, updateStyle }, { event, partial }) {
+    const value = event.target.value;
+    updateStyle(`${value}px`, { partial });
+  },
+  update({ value, el }) {
+    el.querySelector('.my-input').value = parseInt(value, 10);
+  },
+  destroy() {},
+});
+```
+</CodeGroup>
+
+---
+
+### getBuiltIn
+
+```typescript
+getBuiltIn(prop: string): PropertyProps | undefined
+```
+
+Returns the built-in property definition for a known CSS property name. Useful for inspecting default options before adding a property to a sector.
+
+<CodeGroup>
+```typescript TypeScript
+const widthDef = editor.StyleManager.getBuiltIn('width');
+console.log(widthDef);
+```
+```javascript JavaScript
+const widthDef = editor.StyleManager.getBuiltIn('width');
+```
+</CodeGroup>
+
+---
+
+### addBuiltIn
+
+```typescript
+addBuiltIn(prop: string, definition: PropertyProps): object
+```
+
+Adds or extends a built-in CSS property definition. This changes the default behaviour for all sectors that reference this property via `buildProps`.
+
+<CodeGroup>
+```typescript TypeScript
+editor.StyleManager.addBuiltIn('border-radius', {
+  type: 'slider',
+  default: '0px',
+  min: 0,
+  max: 100,
+  units: ['px', '%'],
+});
+```
+```javascript JavaScript
+editor.StyleManager.addBuiltIn('border-radius', {
+  type: 'slider',
+  default: '0px',
+  min: 0,
+  max: 100,
+  units: ['px', '%'],
+});
+```
+</CodeGroup>
+
+---
+
+## Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `style:sector:add` | `Sector` | Sector added |
+| `style:sector:remove` | `Sector` | Sector removed |
+| `style:sector:update` | `Sector, changes` | Sector updated |
+| `style:property:add` | `Property` | Property added to a sector |
+| `style:property:remove` | `Property` | Property removed |
+| `style:property:update` | `{ property, from, to, value, opts }` | Property value updated |
+| `style:target` | `StyleTarget \| undefined` | Selected target changed |
+| `style:layer:select` | `{ property: PropertyStack }` | Stack layer selected |
+| `style:custom` | `{ container }` | Custom UI render trigger |
+| `style` | event data | Catch-all for all style events |
+
+```typescript
+editor.on('style:target', (target) => {
+  if (target) {
+    console.log('Styling:', target.getStyle());
+  }
+});
+
+editor.on('style:property:update', ({ property, from, to }) => {
+  console.log(`${property.getName()} changed from ${from.value} to ${to.value}`);
+});
+```
+
+<Note>
+  The `style:custom` event is used by the Custom Style Manager feature. Subscribe to it to render your own UI panel using the data from `editor.StyleManager.getSectors()`.
+</Note>

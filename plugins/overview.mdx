@@ -1,0 +1,120 @@
+---
+title: "GrapesJS Plugins: Extend the Editor with Modules"
+description: "Install and use GrapesJS plugins. Add plugins via the plugins array, pass options with pluginsOpts, and use the usePlugin helper for TypeScript type safety."
+---
+
+Plugins are the primary way to extend GrapesJS beyond its core functionality. Every plugin is a plain function that receives the initialized editor instance, giving it full access to every manager and API the editor exposes. Because plugins are just functions, they can live in the same file as your app, in a separate local module, or be published to and installed from npm — no special registration ceremony required.
+
+## What is a plugin?
+
+At its simplest, a GrapesJS plugin is a function with the signature `(editor, options) => void`. When you pass a plugin to `grapesjs.init()`, GrapesJS calls it automatically after all internal modules are initialized and before `loadOnStart` runs. This timing guarantee means your plugin can safely register new block types, component definitions, commands, style sectors, or anything else that needs to be in place before the editor loads its initial content.
+
+```javascript
+function myPlugin(editor) {
+  editor.Blocks.add('my-block', {
+    label: 'My Block',
+    content: '<div class="my-block">Hello from my plugin</div>',
+  });
+}
+```
+
+## Installing a plugin
+
+### Using the `plugins` array
+
+Pass an array of plugin functions (or npm package imports) to the `plugins` key in `grapesjs.init()`. GrapesJS calls each one in order.
+
+```javascript
+import grapesjs from 'grapesjs';
+import grapesjsPresetWebpage from 'grapesjs-preset-webpage';
+import grapesjsBlocksBasic from 'grapesjs-blocks-basic';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [grapesjsPresetWebpage, grapesjsBlocksBasic],
+});
+```
+
+### Passing options with `pluginsOpts`
+
+Many plugins accept a configuration object as their second argument. Use `pluginsOpts` to supply those options, keyed by the plugin function reference.
+
+```javascript
+import grapesjs from 'grapesjs';
+import grapesjsBlocksBasic from 'grapesjs-blocks-basic';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [grapesjsBlocksBasic],
+  pluginsOpts: {
+    [grapesjsBlocksBasic]: {
+      flexGrid: true,
+      addBasicStyle: false,
+    },
+  },
+});
+```
+
+<Note>
+  The key in `pluginsOpts` must be the same function reference used in the `plugins` array, not a string name.
+</Note>
+
+### Using `usePlugin` for type-safe options
+
+The `usePlugin` helper, exported directly from the `grapesjs` package, lets you bundle a plugin and its options into a single entry in the `plugins` array. This is the preferred approach in TypeScript projects because the options are validated against the plugin's type parameter.
+
+```typescript
+import grapesjs, { usePlugin } from 'grapesjs';
+import grapesjsBlocksBasic from 'grapesjs-blocks-basic';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [
+    usePlugin(grapesjsBlocksBasic, { flexGrid: true }),
+  ],
+  // no pluginsOpts needed
+});
+```
+
+`usePlugin` returns a plain function `(editor: Editor) => void`, so it fits directly into the `plugins` array without any special handling by the runtime.
+
+## The `grapesjs.plugins` object
+
+`grapesjs.plugins` is an instance of `PluginManager` that holds named plugins registered with the now-deprecated `plugins.add(id, fn)` API. You will encounter it mainly when working with legacy plugins distributed as UMD globals.
+
+```javascript
+// Reading a registered plugin by string ID (legacy pattern)
+const plugin = grapesjs.plugins.get('some-legacy-plugin');
+
+// Inspecting all registered plugins
+const all = grapesjs.plugins.getAll();
+```
+
+<Warning>
+  The `plugins.add()` method is deprecated. Modern plugins are plain functions; there is no need to register them by name.
+</Warning>
+
+## Plugin execution order
+
+Plugins run sequentially in the order they appear in the `plugins` array, synchronously, after the editor's internal modules initialize but before `loadOnStart` restores any persisted project data. This means:
+
+- All editor APIs (`editor.Blocks`, `editor.Components`, `editor.Commands`, etc.) are available inside your plugin.
+- Custom component types or block definitions registered by an earlier plugin are visible to later plugins.
+- Stored project data (components, styles) is not yet loaded — use editor events such as `load` if you need to act on loaded content.
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Creating plugins" icon="puzzle-piece" href="/plugins/creating-plugins">
+    Build your own plugin from scratch, add TypeScript types, and publish it to npm.
+  </Card>
+  <Card title="API reference" icon="book-open" href="https://grapesjs.com/docs/api/">
+    Full reference for every editor module accessible inside a plugin.
+  </Card>
+  <Card title="grapesjs-cli boilerplate" icon="terminal" href="https://github.com/GrapesJS/cli">
+    Scaffold a new plugin project with a pre-configured dev and build setup.
+  </Card>
+  <Card title="Block Manager" icon="squares-four" href="https://grapesjs.com/docs/modules/Blocks.html">
+    Register drag-and-drop blocks for the editor panel.
+  </Card>
+</Columns>

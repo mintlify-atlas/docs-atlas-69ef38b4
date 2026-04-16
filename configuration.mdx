@@ -1,0 +1,382 @@
+---
+title: "GrapesJS EditorConfig Reference: All Configuration Options"
+description: "Complete reference for every GrapesJS EditorConfig option — types, default values, and descriptions grouped by category for quick lookup."
+---
+
+All configuration options are passed as a single object to `grapesjs.init()`. The object conforms to the `EditorConfig` TypeScript interface defined in `packages/core/src/editor/config/config.ts`. Every option is optional unless noted otherwise.
+
+```javascript
+import grapesjs from 'grapesjs';
+
+const editor = grapesjs.init({
+  container: '#gjs',     // required unless headless: true
+  height: '100vh',
+  plugins: [],
+  storageManager: { type: 'local' },
+});
+```
+
+---
+
+## General
+
+<ParamField path="container" type="string | HTMLElement">
+  CSS selector string or `HTMLElement` that GrapesJS renders into. Required unless `headless` is `true`.
+</ParamField>
+
+<ParamField path="autorender" type="boolean" default="true">
+  When `true`, the editor renders into `container` immediately after `init()` returns. Set to `false` if you need to defer rendering.
+</ParamField>
+
+<ParamField path="headless" type="boolean" default="false">
+  Initialize the editor without any UI. Useful for server-side rendering, programmatic template generation, or testing. When `true`, `container` is not required.
+</ParamField>
+
+<ParamField path="noticeOnUnload" type="boolean" default="true">
+  Show a browser `beforeunload` confirmation dialog when there are unsaved changes. Disable this if you implement your own unsaved-changes guard.
+</ParamField>
+
+<ParamField path="log" type="('debug' | 'info' | 'warning' | 'error')[] | boolean" default="['warning', 'error']">
+  Controls which log levels are printed to the browser console. Pass `true` to print all levels, `false` to silence all output, or an array of levels to enable selectively.
+</ParamField>
+
+<ParamField path="telemetry" type="boolean" default="true">
+  Enables anonymous usage telemetry to help the GrapesJS project understand adoption. Set to `false` to opt out.
+</ParamField>
+
+<ParamField path="stylePrefix" type="string" default="'gjs-'">
+  CSS class prefix applied to all editor UI elements. Override this if `gjs-` conflicts with existing classes in your application.
+</ParamField>
+
+<ParamField path="projectData" type="object">
+  Initial project data (the JSON structure returned by `editor.getProjectData()`) to load on initialization. Use this to restore a previously saved project on page load without relying on the Storage Manager's autoload.
+</ParamField>
+
+---
+
+## Canvas
+
+<ParamField path="height" type="string" default="'900px'">
+  CSS height of the editor container element. Accepts any valid CSS length value.
+</ParamField>
+
+<ParamField path="width" type="string" default="'100%'">
+  CSS width of the editor container element. Accepts any valid CSS length value.
+</ParamField>
+
+<ParamField path="dragMode" type="'translate' | 'absolute'">
+  Global drag mode for components. By default, components follow normal HTML flow. Set to `'absolute'` for design-tool-style absolute positioning, or `'translate'` to use CSS `transform: translate()`.
+</ParamField>
+
+<ParamField path="nativeDnD" type="boolean" default="true">
+  Use the browser's native HTML5 drag-and-drop API for block dragging. Disable to fall back to the custom GrapesJS drag implementation.
+</ParamField>
+
+<ParamField path="multipleSelection" type="boolean" default="true">
+  Allow users to select multiple components simultaneously (hold Shift or Cmd/Ctrl to multi-select).
+</ParamField>
+
+<ParamField path="protectedCss" type="string" default="'* { box-sizing: border-box; } body {margin: 0;}'">
+  CSS injected into the canvas iframe that is included in the code viewer but intentionally excluded from `editor.getCss()`. Useful for base reset styles that should not be exported.
+</ParamField>
+
+<ParamField path="canvasCss" type="string" default="''">
+  Extra CSS injected into the canvas iframe only — not exported. Use for styling selected-component highlights or other canvas-only visual aids.
+</ParamField>
+
+<ParamField path="showOffsets" type="boolean" default="false">
+  Show padding and margin offset guides for all components in the canvas.
+</ParamField>
+
+<ParamField path="showOffsetsSelected" type="boolean" default="false">
+  Show padding and margin offset guides only for the currently selected component.
+</ParamField>
+
+<ParamField path="showToolbar" type="boolean" default="true">
+  Show the component toolbar (move, copy, delete) when a component is selected.
+</ParamField>
+
+<ParamField path="showDevices" type="boolean" default="true">
+  Show the device switcher UI in the editor toolbar.
+</ParamField>
+
+<ParamField path="devicePreviewMode" type="boolean" default="false">
+  When `true`, changing the device does not create new CSS `@media` rules — it only resizes the canvas viewport. Use for preview-only device switching.
+</ParamField>
+
+<ParamField path="mediaCondition" type="string" default="'max-width'">
+  The CSS media query condition used when generating responsive styles. Change to `'min-width'` for mobile-first projects.
+</ParamField>
+
+<ParamField path="listenToEl" type="HTMLElement[]" default="[]">
+  Array of DOM elements whose scroll events trigger a canvas position recalculation. Required when the editor is inside a scrollable container such as a modal. If empty, GrapesJS attaches the listener to the first scrollable parent automatically.
+</ParamField>
+
+<ParamField path="cssIcons" type="string" default="'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'">
+  URL of an icon CSS file loaded asynchronously for the editor UI. Override to use a different icon set or a self-hosted version of Font Awesome.
+</ParamField>
+
+<ParamField path="forceClass" type="boolean" default="true">
+  When a new component is created with inline `style` attributes, move those styles into a generated class instead. Keeps the component model clean and avoids inline style pollution.
+</ParamField>
+
+<ParamField path="jsInHtml" type="boolean" default="true">
+  Include component `<script>` tags in the output of `editor.getHtml()`.
+</ParamField>
+
+<ParamField path="clearStyles" type="boolean" default="false">
+  Experimental. Automatically remove CSS rules that are no longer referenced by any component when `editor.getCss()` is called. Useful for keeping large templates clean, but use with caution — rules may be needed later.
+</ParamField>
+
+<ParamField path="avoidDefaults" type="boolean" default="true">
+  Omit default property values from serialized JSON to reduce storage size.
+</ParamField>
+
+<ParamField path="keepUnusedStyles" type="boolean" default="false">
+  Keep CSS rules in the editor even after their target components are deleted.
+</ParamField>
+
+---
+
+## Plugins
+
+<ParamField path="plugins" type="(string | Plugin)[]" default="[]">
+  Array of plugins to load during initialization. Each item can be a registered plugin name string or a plugin function directly. Plugins receive `(editor, options)` and are called before `autorender`.
+
+  ```javascript
+  import myPlugin from './my-plugin';
+
+  grapesjs.init({
+    plugins: [myPlugin, 'grapesjs-blocks-basic'],
+    pluginsOpts: {
+      'grapesjs-blocks-basic': { flexGrid: true },
+    },
+  });
+  ```
+</ParamField>
+
+<ParamField path="pluginsOpts" type="Record<string, any>" default="{}">
+  Options passed to individual plugins. Keys are plugin name strings (or the plugin function reference when using `usePlugin`). Values are the options object for that plugin.
+</ParamField>
+
+---
+
+## Managers
+
+Each manager accepts a configuration sub-object. Passing `false` disables the manager entirely where supported.
+
+<ParamField path="storageManager" type="StorageManagerConfig | boolean" default="{}">
+  Configure the Storage Manager. Key options:
+
+  - `type`: `'local'` | `'remote'` — storage adapter to use.
+  - `autosave`: `boolean` — save automatically on changes.
+  - `autoload`: `boolean` — load stored data on editor init.
+  - `stepsBeforeSave`: `number` — number of change events before an autosave triggers.
+  - `options.local.key`: localStorage key (default `'gjsProject'`).
+  - `options.remote.urlStore` / `options.remote.urlLoad`: remote API endpoints.
+
+  See the [Storage module](/modules/storage) for full details and custom adapter examples.
+</ParamField>
+
+<ParamField path="assetManager" type="AssetManagerConfig" default="{}">
+  Configure the Asset Manager (media library). Accepts an `assets` array of pre-loaded asset URLs, `upload` endpoint configuration, and custom `uploadFile` handler. See [Asset Manager API](/api/asset-manager).
+</ParamField>
+
+<ParamField path="blockManager" type="BlockManagerConfig" default="{}">
+  Configure the Block Manager. Key options:
+
+  - `appendTo`: CSS selector or element to render the block palette into.
+  - `blocks`: array of block definition objects — each requires `id`, `label`, and `content`.
+
+  See [Block concepts](/concepts/blocks) and [Block Manager API](/api/block-manager).
+</ParamField>
+
+<ParamField path="styleManager" type="StyleManagerConfig" default="{}">
+  Configure the Style Manager. Key options:
+
+  - `appendTo`: CSS selector or element to render the style panel into.
+  - `sectors`: array of sector definitions, each with `name`, `buildProps`, and `properties`.
+
+  See [Style concepts](/concepts/styles) and [Style Manager API](/api/style-manager).
+</ParamField>
+
+<ParamField path="selectorManager" type="SelectorManagerConfig" default="{}">
+  Configure the Selector Manager, which manages CSS class selectors and pseudo-states (`:hover`, etc.). Usually rendered alongside the Style Manager. See [Selector Manager API](/api/selector-manager).
+</ParamField>
+
+<ParamField path="layerManager" type="LayerManagerConfig" default="{}">
+  Configure the Layer Manager (component tree panel).
+
+  - `appendTo`: CSS selector or element to render the layers panel into.
+
+  See [Layer Manager API](/api/layer-manager).
+</ParamField>
+
+<ParamField path="traitManager" type="TraitManagerConfig" default="{}">
+  Configure the Trait Manager, which renders HTML attribute editors for selected components.
+
+  - `appendTo`: CSS selector or element to render the trait panel into.
+</ParamField>
+
+<ParamField path="deviceManager" type="DeviceManagerConfig" default="{}">
+  Configure responsive device breakpoints. Key option:
+
+  - `devices`: array of device objects, each with `name`, `width` (canvas width), and optional `widthMedia` (CSS `@media` width).
+
+  See [Device Manager API](/api/device-manager).
+</ParamField>
+
+<ParamField path="domComponents" type="DomComponentsConfig" default="{}">
+  Configure the DOM Components module, which manages the component registry and canvas rendering. See [Components API](/api/components).
+</ParamField>
+
+<ParamField path="canvas" type="CanvasConfig" default="{}">
+  Configure the Canvas module.
+
+  - `frameStyle`: CSS string applied to the canvas `<iframe>` document, replacing the deprecated `baseCss` option.
+
+  See [Canvas concepts](/concepts/canvas).
+</ParamField>
+
+---
+
+## Storage
+
+<ParamField path="storageManager" type="StorageManagerConfig | boolean" default="{}">
+  See [Managers — storageManager](#managers) above for the full option breakdown. Pass `false` to disable storage entirely (no autosave, no autoload). See [Storage Manager API](/api/storage-manager).
+</ParamField>
+
+---
+
+## UI modules
+
+<ParamField path="panels" type="PanelsConfig" default="{}">
+  Define default panels and their buttons in the initial configuration. Panels can also be added dynamically with `editor.Panels.addPanel()`. See [Panels API](/api/panels).
+
+  ```javascript
+  panels: {
+    defaults: [
+      {
+        id: 'my-panel',
+        el: '.my-panel-container',
+        buttons: [
+          { id: 'btn1', label: 'Action', command: 'some-command' },
+        ],
+      },
+    ],
+  }
+  ```
+</ParamField>
+
+<ParamField path="commands" type="CommandsConfig" default="{}">
+  Register default commands available globally across the editor. Commands are callable by name from buttons, keymaps, and the API. See [Commands API](/api/commands).
+</ParamField>
+
+<ParamField path="keymaps" type="KeymapsConfig" default="{}">
+  Register keyboard shortcuts that trigger commands. See [Keymaps API](/api/keymaps).
+</ParamField>
+
+<ParamField path="richTextEditor" type="RichTextEditorConfig" default="{}">
+  Configure the built-in Rich Text Editor used when editing text components inline. The RTE can be replaced entirely with a custom implementation. See [Custom RTE guide](/guides/custom-rte).
+</ParamField>
+
+<ParamField path="modal" type="ModalConfig" default="{}">
+  Configure the Modal Dialog module used for asset management and code export UI. See [Modal API](/api/modal).
+</ParamField>
+
+---
+
+## Internationalization
+
+<ParamField path="i18n" type="I18nConfig" default="{}">
+  Configure internationalization. Key options:
+
+  - `locale`: active locale string (e.g. `'en'`, `'it'`).
+  - `localeFallback`: fallback locale when a key is missing (default `'en'`).
+  - `messages`: additional locale message objects to merge.
+
+  See [I18n module](/modules/i18n).
+</ParamField>
+
+---
+
+## Undo Manager
+
+<ParamField path="undoManager" type="UndoManagerConfig | boolean" default="{}">
+  Configure the undo/redo stack. Pass `false` to disable undo management entirely.
+</ParamField>
+
+---
+
+## HTML and CSS output
+
+<ParamField path="optsHtml" type="HTMLGeneratorBuildOptions" default="{}">
+  Default options passed to `editor.getHtml()` on every call. Use to configure which attributes or wrappers are included in the HTML output.
+</ParamField>
+
+<ParamField path="optsCss" type="CssGeneratorBuildOptions" default="{}">
+  Default options passed to `editor.getCss()` on every call. Use to configure media queries, selector prefix, and other CSS output settings.
+</ParamField>
+
+<ParamField path="defaultCommand" type="string" default="'select-comp'">
+  Command to run when no other command is active.
+</ParamField>
+
+---
+
+## Data Sources
+
+<ParamField path="dataSources" type="DataSourcesConfig" default="{}">
+  Configure the Data Sources module for binding dynamic data to components, traits, and styles. See [Data Sources module](/modules/data-sources) and [Data Sources API](/api/data-sources).
+</ParamField>
+
+---
+
+## Parser
+
+<ParamField path="parser" type="ParserConfig" default="{}">
+  Configure the HTML/CSS parser used when loading content into the editor. Use `optionsHtml.allowScripts` to permit `<script>` tags in parsed HTML. See the [Custom CSS Parser guide](/guides/custom-css-parser).
+</ParamField>
+
+---
+
+## Deprecated options
+
+<Warning>
+  The following options are deprecated. Avoid using them in new projects.
+</Warning>
+
+<ParamField path="components" type="string" deprecated>
+  Initial HTML string to load. Deprecated in favor of `projectData`.
+</ParamField>
+
+<ParamField path="style" type="string" deprecated>
+  Initial CSS string to load. Deprecated in favor of `projectData`.
+</ParamField>
+
+<ParamField path="fromElement" type="boolean" default="false" deprecated>
+  Read initial HTML and CSS from the container element's existing content. Deprecated in favor of `projectData`.
+</ParamField>
+
+<ParamField path="baseCss" type="string" deprecated>
+  CSS injected into the canvas iframe. Deprecated in favor of `canvas.frameStyle`.
+</ParamField>
+
+---
+
+## Related references
+
+<CardGroup cols={2}>
+  <Card title="Getting started" icon="rocket" href="/getting-started">
+    See these options in context with a full working editor example.
+  </Card>
+  <Card title="Editor API" icon="code" href="/api/editor">
+    Methods available on the Editor instance returned by `grapesjs.init()`.
+  </Card>
+  <Card title="Storage Manager API" icon="floppy-disk" href="/api/storage-manager">
+    Full API reference for the Storage Manager module.
+  </Card>
+  <Card title="Plugin overview" icon="plug" href="/plugins/overview">
+    Learn how plugins extend EditorConfig with their own options via `pluginsOpts`.
+  </Card>
+</CardGroup>

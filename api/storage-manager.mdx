@@ -1,0 +1,472 @@
+---
+title: "Storage Manager API — GrapesJS Persistence Layer"
+description: "Complete API reference for editor.StorageManager. Configure autosave, add custom storage adapters, store and load project data, and handle lifecycle events."
+---
+
+The `StorageManager` module handles all project persistence in GrapesJS. It ships with two built-in adapters — `local` (localStorage) and `remote` (REST API) — and exposes a simple interface so you can register any custom backend. Access it via `editor.Storage` (also aliased as `editor.Storages`).
+
+## Configuration
+
+Pass `storageManager` options when initialising the editor:
+
+```js
+const editor = grapesjs.init({
+  storageManager: {
+    type: 'local',       // 'local' | 'remote' | your custom id
+    autosave: true,      // save automatically on changes
+    autoload: true,      // load on editor init
+    stepsBeforeSave: 1,  // changes required to trigger autosave
+    options: {
+      local: { key: 'gjsProject' },
+      remote: {
+        urlLoad: '/api/project',
+        urlStore: '/api/project',
+      },
+    },
+  },
+});
+```
+
+To disable storage entirely, pass `false`:
+
+```js
+grapesjs.init({ storageManager: false });
+```
+
+<Note>
+  `projectData` passed directly to `grapesjs.init()` will bypass the initial `autoload` call entirely, which is useful for server-side-rendered pages.
+</Note>
+
+---
+
+## Methods
+
+### `isAutosave()`
+
+Returns whether autosave is currently enabled.
+
+```ts
+isAutosave(): boolean
+```
+
+```js
+const enabled = editor.Storage.isAutosave(); // true
+```
+
+---
+
+### `setAutosave(value)`
+
+Enables or disables autosave at runtime. Returns the `StorageManager` instance for chaining.
+
+```ts
+setAutosave(value: boolean): this
+```
+
+<ParamField path="value" type="boolean" required>
+  `true` to enable autosave, `false` to disable it.
+</ParamField>
+
+```js
+editor.Storage.setAutosave(false); // disable autosave
+```
+
+---
+
+### `getStepsBeforeSave()`
+
+Returns the number of editor changes that must accumulate before autosave fires.
+
+```ts
+getStepsBeforeSave(): number
+```
+
+```js
+const steps = editor.Storage.getStepsBeforeSave(); // 1
+```
+
+---
+
+### `setStepsBeforeSave(value)`
+
+Sets the number of editor changes required before autosave fires. Increase this for remote storage to reduce network calls. Returns the `StorageManager` instance.
+
+```ts
+setStepsBeforeSave(value: number): this
+```
+
+<ParamField path="value" type="number" required>
+  Minimum number of tracked changes before an automatic save is triggered.
+</ParamField>
+
+```js
+editor.Storage.setStepsBeforeSave(3);
+```
+
+---
+
+### `store(data, opts?)`
+
+Stores project data using the currently active storage adapter. Fires the appropriate lifecycle events. Returns a promise that resolves with the stored `ProjectData` object.
+
+```ts
+async store<T extends StorageOptions>(
+  data: ProjectData,
+  options?: T
+): Promise<ProjectData>
+```
+
+<ParamField path="data" type="ProjectData" required>
+  The project JSON to store. Obtain it with `editor.getProjectData()`.
+</ParamField>
+
+<ParamField path="opts" type="StorageOptions">
+  Per-call overrides that are merged with the adapter's configured options.
+</ParamField>
+
+<CodeGroup>
+```ts TypeScript
+const data = editor.getProjectData();
+const stored = await editor.Storage.store(data);
+```
+
+```js JavaScript
+const data = editor.getProjectData();
+const stored = await editor.Storage.store(data);
+```
+</CodeGroup>
+
+---
+
+### `load(opts?)`
+
+Loads project data from the currently active storage adapter. Returns a promise that resolves with the loaded `ProjectData` object (empty object `{}` if nothing is found).
+
+```ts
+async load<T extends StorageOptions>(options?: T): Promise<ProjectData>
+```
+
+<ParamField path="opts" type="StorageOptions">
+  Per-call overrides merged with the adapter's configured options.
+</ParamField>
+
+<CodeGroup>
+```ts TypeScript
+const data = await editor.Storage.load();
+editor.loadProjectData(data);
+```
+
+```js JavaScript
+const data = await editor.Storage.load();
+editor.loadProjectData(data);
+```
+</CodeGroup>
+
+<Note>
+  `editor.store()` and `editor.load()` are convenience shortcuts that call through to `StorageManager` and also trigger the editor-level dirty count logic.
+</Note>
+
+---
+
+### `add(id, storage)`
+
+Registers a custom storage adapter. Calling `add` with an existing id replaces that adapter.
+
+```ts
+add<T extends StorageOptions>(type: string, storage: IStorage<T>): this
+```
+
+<ParamField path="id" type="string" required>
+  Unique identifier for this storage type (e.g. `'session'`, `'indexeddb'`).
+</ParamField>
+
+<ParamField path="storage" type="IStorage" required>
+  An object with async `load` and `store` methods.
+
+  <Expandable title="IStorage interface">
+    <ResponseField name="load" type="(options: StorageOptions) => Promise<ProjectData>">
+      Called when loading project data. Receives the merged storage options.
+    </ResponseField>
+    <ResponseField name="store" type="(data: ProjectData, options: StorageOptions) => Promise<any>">
+      Called when storing project data. Receives the `ProjectData` object and merged options.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+```js
+editor.Storage.add('session', {
+  async load(options = {}) {
+    return JSON.parse(sessionStorage.getItem(options.key) || '{}');
+  },
+  async store(data, options = {}) {
+    sessionStorage.setItem(options.key, JSON.stringify(data));
+  },
+});
+```
+
+---
+
+### `get(id)`
+
+Returns a registered storage adapter by its type identifier, or `undefined` if not found.
+
+```ts
+get<T extends StorageOptions>(type: string): IStorage<T> | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The storage type identifier used when calling `add`.
+</ParamField>
+
+```js
+const local = editor.Storage.get('local');
+```
+
+---
+
+### `getCurrent()`
+
+Returns the identifier of the currently active storage type.
+
+```ts
+getCurrent(): string
+```
+
+```js
+const type = editor.Storage.getCurrent(); // 'local'
+```
+
+---
+
+### `setCurrent(id)`
+
+Switches the active storage type. Returns the `StorageManager` instance.
+
+```ts
+setCurrent(type: string): this
+```
+
+<ParamField path="id" type="string" required>
+  A registered storage type identifier.
+</ParamField>
+
+```js
+editor.Storage.setCurrent('remote');
+```
+
+---
+
+### `getConfig()`
+
+Returns the full `StorageManagerConfig` object, including the `currentStorage` field.
+
+```ts
+getConfig(): StorageManagerConfig & { currentStorage?: string }
+```
+
+---
+
+### `getStorages()`
+
+Returns a map of all registered storage adapters keyed by their type identifier.
+
+```ts
+getStorages(): Record<string, IStorage>
+```
+
+---
+
+### `getStorageOptions(type)`
+
+Returns the options object for a specific storage type as configured in `storageManager.options`.
+
+```ts
+getStorageOptions(type: string): StorageOptions
+```
+
+---
+
+## Custom storage adapters
+
+A storage adapter is a plain object with two async methods. Both receive storage options merged from the global config and any per-call overrides.
+
+```js
+const myAdapter = {
+  async load(options) {
+    const res = await fetch(options.urlLoad);
+    return res.json();
+  },
+  async store(data, options) {
+    await fetch(options.urlStore, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+editor.Storage.add('my-adapter', myAdapter);
+editor.Storage.setCurrent('my-adapter');
+```
+
+---
+
+## Built-in storage types
+
+<Tabs>
+  <Tab title="Local storage">
+    Uses the browser's `localStorage` API. This is the default storage type.
+
+    ```js
+    grapesjs.init({
+      storageManager: {
+        type: 'local',
+        options: {
+          local: {
+            key: `gjsProject-${projectId}`, // unique key per project
+          },
+        },
+      },
+    });
+    ```
+
+    <ResponseField name="key" type="string">
+      The `localStorage` key used to read and write project data. Default: `'gjsProject'`.
+    </ResponseField>
+    <ResponseField name="checkLocal" type="boolean">
+      Whether to check local storage on load. Default: `true`.
+    </ResponseField>
+  </Tab>
+  <Tab title="Remote storage">
+    Sends project data to a REST endpoint using `GET` (load) and `POST` (store).
+
+    ```js
+    grapesjs.init({
+      storageManager: {
+        type: 'remote',
+        stepsBeforeSave: 3,
+        options: {
+          remote: {
+            urlLoad: `/api/projects/${projectId}`,
+            urlStore: `/api/projects/${projectId}`,
+            // Change HTTP method from POST to PATCH
+            fetchOptions: (opts) =>
+              opts.method === 'POST' ? { method: 'PATCH' } : {},
+            // Wrap data before storing
+            onStore: (data) => ({ id: projectId, data }),
+            // Extract data from response
+            onLoad: (result) => result.data,
+          },
+        },
+      },
+    });
+    ```
+
+    <ResponseField name="urlStore" type="string">
+      Endpoint for `POST` requests when storing project data.
+    </ResponseField>
+    <ResponseField name="urlLoad" type="string">
+      Endpoint for `GET` requests when loading project data.
+    </ResponseField>
+    <ResponseField name="headers" type="Record<string, string>">
+      HTTP headers sent with every request. Default: `{}`.
+    </ResponseField>
+    <ResponseField name="credentials" type="string">
+      Fetch credentials mode. Default: `'include'`.
+    </ResponseField>
+    <ResponseField name="fetchOptions" type="(opts) => RequestInit | string">
+      A function returning additional fetch options (or a stringified object).
+    </ResponseField>
+    <ResponseField name="onStore" type="(data, editor) => ProjectData">
+      Transform project data before sending. Useful for wrapping the payload.
+    </ResponseField>
+    <ResponseField name="onLoad" type="(result, editor) => ProjectData">
+      Transform the server response before loading into the editor.
+    </ResponseField>
+  </Tab>
+</Tabs>
+
+---
+
+## ProjectData structure
+
+`ProjectData` is a plain JSON object. The exact shape depends on which modules are active, but a typical object looks like:
+
+```json
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "frames": [
+        {
+          "component": { "type": "wrapper", "components": [...] }
+        }
+      ]
+    }
+  ],
+  "styles": [],
+  "assets": [],
+  "dataSources": []
+}
+```
+
+<Warning>
+  Always use the JSON project data to persist and restore editor state. Do not rely on serialised HTML/CSS as a persistence layer — components carry metadata that HTML cannot represent.
+</Warning>
+
+---
+
+## Recovery
+
+When `type` is `'remote'` and `recovery: true` is set in the config, GrapesJS will write a local backup on every failed remote save. On the next load it prompts the user to restore from this backup.
+
+```js
+grapesjs.init({
+  storageManager: {
+    type: 'remote',
+    recovery: true,
+    // or a custom dialog:
+    // recovery: (accept, cancel, editor) => {
+    //   showMyDialog().then(accept).catch(cancel);
+    // },
+    options: { remote: { urlLoad: '...', urlStore: '...' } },
+  },
+});
+```
+
+---
+
+## Events
+
+Listen to storage events on the editor instance:
+
+```js
+editor.on('storage:start', (type) => {
+  console.log('Storage operation started:', type); // 'store' | 'load'
+});
+
+editor.on('storage:end:store', (data) => {
+  console.log('Project stored successfully');
+});
+
+editor.on('storage:error', (err, type) => {
+  console.error(`Storage ${type} failed:`, err);
+});
+```
+
+| Event | Callback arguments | Description |
+|---|---|---|
+| `storage:start` | `(type: 'store' \| 'load', data?)` | Any storage operation starts. |
+| `storage:start:store` | `(data: ProjectData)` | Store operation starts. |
+| `storage:start:load` | `(data?)` | Load operation starts. |
+| `storage:store` | `(data: ProjectData, response)` | Project stored successfully. |
+| `storage:load` | `(data: ProjectData, response)` | Project loaded successfully. |
+| `storage:after` | `()` | Fired right after `storage:store` or `storage:load`. |
+| `storage:after:store` | `(data, response)` | Fired right after a successful store. |
+| `storage:after:load` | `(data, response)` | Fired right after a successful load. |
+| `storage:end` | `(type, data, response?)` | Operation ended (success or error). |
+| `storage:end:store` | `(data, response?)` | Store operation ended. |
+| `storage:end:load` | `(data, response?)` | Load operation ended. |
+| `storage:error` | `(err, type)` | Any storage error. |
+| `storage:error:store` | `(err)` | Error during store. |
+| `storage:error:load` | `(err)` | Error during load. |

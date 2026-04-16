@@ -1,0 +1,451 @@
+---
+title: "Selector Manager API: Classes, IDs & States"
+description: "Reference for editor.Selectors in GrapesJS. Add and retrieve CSS selectors, manage pseudo-class states like :hover, and target multiple components for styling."
+---
+
+The Selector Manager tracks every CSS selector (class, ID, or tag) used across the canvas and links them to the components and CSS rules that reference them. It also manages the active pseudo-class **state** (such as `:hover`) used by the Style Manager when writing scoped CSS rules. Access it through `editor.Selectors`.
+
+## Selectors
+
+### add
+
+```typescript
+add(
+  props: SelectorStringObject,
+  opts?: object
+): Selector | Selector[]
+```
+
+Adds a new selector to the global selector collection. If a selector with the same name and type already exists, the existing one is returned.
+
+You can pass a plain string (with an optional `.` or `#` prefix), or an object with `name` and optional `label` / `type` fields.
+
+<ParamField path="props" type="SelectorStringObject" required>
+  A selector string (e.g. `'.my-class'`, `'#my-id'`) or an object `{ name, label, type }`.
+
+  - String starting with `.` → class selector
+  - String starting with `#` → ID selector
+  - Plain string → class selector (no prefix required)
+</ParamField>
+
+<ParamField path="opts" type="object">
+  Optional extra properties merged onto the Selector model.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+// Add a class selector
+const cls = editor.Selectors.add('.my-class');
+console.log(cls.toString()); // '.my-class'
+
+// Using an object
+const cls2 = editor.Selectors.add({ name: 'hero', label: 'Hero Section' });
+
+// Add an ID selector
+const idSel = editor.Selectors.add('#main-header');
+```
+```javascript JavaScript
+const cls = editor.Selectors.add('.my-class');
+const idSel = editor.Selectors.add('#main-header');
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Selector">
+  The added (or pre-existing) Selector instance.
+</ResponseField>
+
+---
+
+### get
+
+```typescript
+get(name: string, type?: number): Selector | undefined
+get(name: string[], type?: number): Selector[]
+```
+
+Retrieves a selector by its string identifier. Prepend `.` for a class or `#` for an ID. Returns `undefined` if not found.
+
+<ParamField path="name" type="string | string[]" required>
+  Selector string identifier or array of identifiers.
+</ParamField>
+
+<ParamField path="type" type="number">
+  Internal type constant (usually inferred from the prefix).
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const selector = editor.Selectors.get('.my-class');
+const idSelector = editor.Selectors.get('#my-id');
+
+// Get multiple
+const many = editor.Selectors.get(['.class-a', '.class-b']);
+```
+```javascript JavaScript
+const selector = editor.Selectors.get('.my-class');
+const idSelector = editor.Selectors.get('#my-id');
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Selector | undefined">
+  Matched selector or `undefined`.
+</ResponseField>
+
+---
+
+### getAll
+
+```typescript
+getAll(opts?: { array?: boolean }): Selectors | Selector[]
+```
+
+Returns all selectors known to the manager.
+
+<ParamField path="opts" type="object">
+  Pass `{ array: true }` to get a plain `Selector[]` instead of the Backbone `Selectors` collection.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const all = editor.Selectors.getAll({ array: true });
+all.forEach((sel) => console.log(sel.toString()));
+```
+```javascript JavaScript
+editor.Selectors.getAll({ array: true }).forEach((s) => console.log(s.toString()));
+```
+</CodeGroup>
+
+---
+
+### remove
+
+```typescript
+remove(selector: string | Selector, opts?: RemoveOptions): Selector
+```
+
+Removes a selector from the global collection. Pass a string identifier or a `Selector` instance.
+
+<ParamField path="selector" type="string | Selector" required>
+  The selector to remove.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.Selectors.remove('.obsolete-class');
+// Or pass an instance
+const sel = editor.Selectors.get('.another-class');
+sel && editor.Selectors.remove(sel);
+```
+```javascript JavaScript
+editor.Selectors.remove('.obsolete-class');
+```
+</CodeGroup>
+
+---
+
+### rename
+
+```typescript
+rename(selector: Selector, name: string, opts?: SetOptions): Selector
+```
+
+Renames a selector. If a selector with the new name already exists, that existing selector is returned instead and no rename occurs.
+
+<ParamField path="selector" type="Selector" required>The selector to rename.</ParamField>
+<ParamField path="name" type="string" required>The new name (without `.` or `#` prefix).</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const sel = editor.Selectors.get('.old-name')!;
+const result = editor.Selectors.rename(sel, 'new-name');
+// result === sel means it was renamed; otherwise a pre-existing selector was returned
+```
+```javascript JavaScript
+const sel = editor.Selectors.get('.old-name');
+editor.Selectors.rename(sel, 'new-name');
+```
+</CodeGroup>
+
+---
+
+## Selection
+
+### getSelected
+
+```typescript
+getSelected(): Selector[]
+```
+
+Returns the **common** selectors shared by all currently selected components. Only selectors applied to every selected component are included — this reflects what the Style Manager shows when multiple components are selected.
+
+<CodeGroup>
+```typescript TypeScript
+const selected = editor.Selectors.getSelected();
+console.log(selected.map((s) => s.toString()));
+```
+```javascript JavaScript
+const selected = editor.Selectors.getSelected();
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Selector[]">
+  Array of common selectors across the current component selection.
+</ResponseField>
+
+---
+
+### getSelectedAll
+
+```typescript
+getSelectedAll(): Selector[]
+```
+
+Returns all selectors in the internal `selected` collection, without filtering for commonality across multi-selection.
+
+<CodeGroup>
+```typescript TypeScript
+const all = editor.Selectors.getSelectedAll();
+```
+```javascript JavaScript
+const all = editor.Selectors.getSelectedAll();
+```
+</CodeGroup>
+
+---
+
+### addSelected
+
+```typescript
+addSelected(props: SelectorStringObject): void
+```
+
+Adds a new selector and immediately applies it to all currently selected components.
+
+<ParamField path="props" type="SelectorStringObject" required>
+  Selector string or `{ name, label }` object.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+// Select some components first, then apply a class
+editor.Selectors.addSelected('.highlighted');
+```
+```javascript JavaScript
+editor.Selectors.addSelected('.highlighted');
+```
+</CodeGroup>
+
+---
+
+### removeSelected
+
+```typescript
+removeSelected(selector: Selector): void
+```
+
+Removes a selector from all currently selected components (does not delete it from the global collection).
+
+<ParamField path="selector" type="Selector" required>The selector to detach from selected components.</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const sel = editor.Selectors.get('.highlighted')!;
+editor.Selectors.removeSelected(sel);
+```
+```javascript JavaScript
+const sel = editor.Selectors.get('.highlighted');
+editor.Selectors.removeSelected(sel);
+```
+</CodeGroup>
+
+---
+
+### getSelectedTargets
+
+```typescript
+getSelectedTargets(): StyleableModel[]
+```
+
+Returns the array of currently selected style targets — the same value returned by `editor.StyleManager.getSelectedAll()`. Useful when you need both selector and style target data in one place.
+
+<CodeGroup>
+```typescript TypeScript
+const targets = editor.Selectors.getSelectedTargets();
+targets.forEach((t) => t.addStyle({ 'border-color': 'blue' }));
+```
+```javascript JavaScript
+editor.Selectors.getSelectedTargets().forEach((t) =>
+  t.addStyle({ 'border-color': 'blue' })
+);
+```
+</CodeGroup>
+
+---
+
+## States
+
+States map to CSS pseudo-classes (`:hover`, `:focus`, etc.). The active state is reflected in the CSS rules generated by the Style Manager.
+
+### setState
+
+```typescript
+setState(value: string): this
+```
+
+Sets the active pseudo-class state. Pass an empty string to clear the state.
+
+<ParamField path="value" type="string" required>
+  State name matching a registered state (e.g. `'hover'`, `'focus'`). Pass `''` to reset.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.Selectors.setState('hover');
+// Now style changes target `.my-class:hover { ... }`
+```
+```javascript JavaScript
+editor.Selectors.setState('hover');
+```
+</CodeGroup>
+
+---
+
+### getState
+
+```typescript
+getState(): string
+```
+
+Returns the currently active state string.
+
+<CodeGroup>
+```typescript TypeScript
+const state = editor.Selectors.getState();
+console.log(state); // 'hover' or ''
+```
+```javascript JavaScript
+console.log(editor.Selectors.getState());
+```
+</CodeGroup>
+
+---
+
+### getStates
+
+```typescript
+getStates(): State[]
+```
+
+Returns all available state definitions as an array.
+
+<CodeGroup>
+```typescript TypeScript
+const states = editor.Selectors.getStates();
+states.forEach((s) => console.log(s.getName()));
+```
+```javascript JavaScript
+editor.Selectors.getStates().forEach((s) => console.log(s.getName()));
+```
+</CodeGroup>
+
+---
+
+### setStates
+
+```typescript
+setStates(states: State[], opts?: any): State[]
+```
+
+Replaces the entire state collection with a new set of state definitions.
+
+<ParamField path="states" type="State[]" required>
+  Array of state objects. Each should have at least a `name` field and optionally a `label`.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.Selectors.setStates([
+  { name: 'hover', label: 'Hover' },
+  { name: 'focus', label: 'Focus' },
+  { name: 'nth-of-type(2n)', label: 'Even' },
+] as any);
+```
+```javascript JavaScript
+editor.Selectors.setStates([
+  { name: 'hover', label: 'Hover' },
+  { name: 'focus', label: 'Focus' },
+]);
+```
+</CodeGroup>
+
+---
+
+## Component-first mode
+
+### setComponentFirst
+
+```typescript
+setComponentFirst(value: boolean): void
+```
+
+When enabled, style changes are applied directly to the component's ID rule instead of to shared class-based rules. This prevents accidental global style changes when editing a single component.
+
+<ParamField path="value" type="boolean" required>
+  `true` to enable component-first mode, `false` to use class-based rules.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.Selectors.setComponentFirst(true);
+```
+```javascript JavaScript
+editor.Selectors.setComponentFirst(true);
+```
+</CodeGroup>
+
+---
+
+### getComponentFirst
+
+```typescript
+getComponentFirst(): boolean
+```
+
+Returns the current value of the component-first option.
+
+<CodeGroup>
+```typescript TypeScript
+const isCmpFirst = editor.Selectors.getComponentFirst();
+```
+```javascript JavaScript
+const isCmpFirst = editor.Selectors.getComponentFirst();
+```
+</CodeGroup>
+
+---
+
+## Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `selector:add` | `Selector` | Selector added to the collection |
+| `selector:remove` | `Selector` | Selector removed |
+| `selector:remove:before` | `Selector` | Before selector removal |
+| `selector:update` | `Selector, changes` | Selector property updated |
+| `selector:state` | `State \| string` | Active state changed |
+| `selector:custom` | `{ states, selected, container }` | Custom UI render trigger |
+| `selector` | event data | Catch-all for all selector events |
+
+```typescript
+editor.on('selector:add', (selector) => {
+  console.log('New selector:', selector.toString());
+});
+
+editor.on('selector:state', (state) => {
+  console.log('Active state:', state);
+});
+```
+
+<Tip>
+  Listen to `selector:custom` to build a fully custom selector UI. The callback receives the current `states` array, the `selected` selectors, and a `container` element hint.
+</Tip>

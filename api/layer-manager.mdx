@@ -1,0 +1,305 @@
+---
+title: "Layer Manager API Reference - GrapesJS UI Modules"
+description: "Complete API reference for editor.Layers (LayerManager) in GrapesJS. Traverse, rename, lock, and toggle visibility of component layers in the tree panel."
+---
+
+The Layer Manager (`editor.Layers`, also accessible as `editor.LayerManager`) exposes the component tree as a navigable hierarchy — the familiar "layers panel" found in design tools. Each entry in the tree corresponds to a component in the canvas, and the API lets you read and mutate layer state (name, open/collapsed, visibility, locked) programmatically. You can also replace the default tree UI entirely with your own implementation.
+
+```ts
+// Obtain the module
+const layers = editor.Layers;
+```
+
+---
+
+## Methods
+
+### `setRoot(component)`
+
+Change the component that acts as the root of the layer tree.
+
+<ParamField path="component" type="Component | string" required>
+  A `Component` instance or a CSS selector string. If the selector does not match, the main wrapper component is used instead.
+</ParamField>
+
+<ResponseField name="returns" type="Component">
+  The component that was set as the new root.
+</ResponseField>
+
+```ts
+// Set root to the currently selected component
+const selected = editor.getSelected();
+if (selected) layers.setRoot(selected);
+
+// Set root by CSS selector
+layers.setRoot('#my-section');
+```
+
+---
+
+### `getRoot()`
+
+Return the component currently set as the root of the layer tree.
+
+<ResponseField name="returns" type="Component">
+  The root `Component` instance.
+</ResponseField>
+
+```ts
+const root = layers.getRoot();
+console.log(root.getName()); // e.g. 'Body'
+```
+
+---
+
+### `getComponents(component)`
+
+Get valid child components of a layer — excludes non-layerable items such as text nodes.
+
+<ParamField path="component" type="Component" required>
+  The parent component whose layerable children you want.
+</ParamField>
+
+<ResponseField name="returns" type="Component[]">
+  Array of layerable child components.
+</ResponseField>
+
+```ts
+const root = layers.getRoot();
+const children = layers.getComponents(root);
+children.forEach((c) => console.log(c.getName()));
+```
+
+---
+
+### `setOpen(component, value)`
+
+Set the open/collapsed state of a layer.
+
+<ParamField path="component" type="Component" required>
+  The component whose layer open state to update.
+</ParamField>
+
+<ParamField path="value" type="boolean" required>
+  `true` to expand the layer, `false` to collapse it.
+</ParamField>
+
+```ts
+layers.setOpen(editor.getSelected()!, true);
+```
+
+---
+
+### `isOpen(component)`
+
+Check whether a layer is currently expanded.
+
+<ParamField path="component" type="Component" required>
+  The component to check.
+</ParamField>
+
+<ResponseField name="returns" type="boolean">
+  `true` if the layer is open.
+</ResponseField>
+
+```ts
+const open = layers.isOpen(editor.getSelected()!);
+```
+
+---
+
+### `setVisible(component, value)`
+
+Show or hide a component by toggling its CSS `display` property. The previous display value is preserved and restored on re-show.
+
+<ParamField path="component" type="Component" required>
+  The component to update.
+</ParamField>
+
+<ParamField path="value" type="boolean" required>
+  `true` to make visible, `false` to hide (`display: none`).
+</ParamField>
+
+```ts
+layers.setVisible(editor.getSelected()!, false); // hide
+layers.setVisible(editor.getSelected()!, true);  // show again
+```
+
+---
+
+### `isVisible(component)`
+
+Check whether a component is visible (i.e. not hidden via `display: none`).
+
+<ParamField path="component" type="Component" required>
+  The component to check.
+</ParamField>
+
+<ResponseField name="returns" type="boolean">
+  `true` if the component is visible.
+</ResponseField>
+
+```ts
+if (!layers.isVisible(cmp)) {
+  layers.setVisible(cmp, true);
+}
+```
+
+---
+
+### `setLocked(component, value)`
+
+Lock or unlock a component in the layer panel, preventing edits.
+
+<ParamField path="component" type="Component" required>
+  The component to update.
+</ParamField>
+
+<ParamField path="value" type="boolean" required>
+  `true` to lock, `false` to unlock.
+</ParamField>
+
+```ts
+layers.setLocked(editor.getSelected()!, true);
+```
+
+---
+
+### `isLocked(component)`
+
+Check whether a component is locked.
+
+<ParamField path="component" type="Component" required>
+  The component to check.
+</ParamField>
+
+<ResponseField name="returns" type="boolean">
+  `true` if the component is locked.
+</ResponseField>
+
+```ts
+const locked = layers.isLocked(cmp);
+```
+
+---
+
+### `setName(component, value)`
+
+Set a custom display name for a layer. This sets the `custom-name` attribute on the component model.
+
+<ParamField path="component" type="Component" required>
+  The component to rename.
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  The new name to display in the layer panel.
+</ParamField>
+
+```ts
+layers.setName(editor.getSelected()!, 'Hero Banner');
+```
+
+---
+
+### `getName(component)`
+
+Get the display name of a layer (falls back to the component's default name).
+
+<ParamField path="component" type="Component" required>
+  The component to query.
+</ParamField>
+
+<ResponseField name="returns" type="string">
+  The component's display name.
+</ResponseField>
+
+```ts
+const name = layers.getName(editor.getSelected()!);
+```
+
+---
+
+### `getLayerData(component)`
+
+Read all layer state for a component in a single call. Useful when building a custom layer UI.
+
+<ParamField path="component" type="Component" required>
+  The component to inspect.
+</ParamField>
+
+<ResponseField name="returns" type="LayerData">
+  <Expandable title="LayerData properties">
+    <ResponseField name="name" type="string">
+      Display name of the layer.
+    </ResponseField>
+    <ResponseField name="open" type="boolean">
+      Whether the layer is expanded.
+    </ResponseField>
+    <ResponseField name="selected" type="boolean">
+      Whether the component is selected.
+    </ResponseField>
+    <ResponseField name="hovered" type="boolean">
+      Whether the component is hovered.
+    </ResponseField>
+    <ResponseField name="visible" type="boolean">
+      Whether the component is visible.
+    </ResponseField>
+    <ResponseField name="locked" type="boolean">
+      Whether the component is locked.
+    </ResponseField>
+    <ResponseField name="components" type="Component[]">
+      Valid child components for the next level of the tree.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```ts
+const data = layers.getLayerData(editor.getSelected()!);
+console.log(data.name, data.visible, data.locked);
+```
+
+---
+
+## Events
+
+| Event | Callback signature | Description |
+|---|---|---|
+| `layer:root` | `(component: Component)` | Fired when the root layer changes. |
+| `layer:component` | `(component: Component, opts?)` | Fired when a component's layer state is updated. |
+| `layer:custom` | `({ container: HTMLElement, root: Component })` | Fired when using a custom Layer Manager UI; use `container` to append your UI element. |
+| `layer:render` | `({ component: Component, el: HTMLElement })` | Fired when a layer item is rendered. |
+
+```ts
+editor.on('layer:root', (root) => {
+  console.log('New root:', root.getName());
+});
+
+editor.on('layer:component', (component) => {
+  // Re-render your custom layer item for this component
+  const data = layers.getLayerData(component);
+  updateMyLayerItem(component, data);
+});
+```
+
+---
+
+## Configuration
+
+Pass `layerManager` options during `grapesjs.init()`:
+
+```ts
+const editor = grapesjs.init({
+  layerManager: {
+    appendTo: '#layers-container', // CSS selector or HTMLElement
+    root: '#my-root-element',      // Initial root component selector
+    sortable: false,               // Disable drag-to-reorder in the default UI
+    hidable: true,                 // Allow hiding layers (default: true)
+    scrollLayers: { behavior: 'smooth', block: 'nearest' },
+    scrollCanvas: { behavior: 'smooth', block: 'nearest' },
+  },
+});
+```
+
+<Tip>
+  For a fully custom layer tree, set `layerManager.custom: true` and build your UI inside the `layer:custom` event callback. Use `layer:component` to reactively update individual items without re-rendering the whole tree.
+</Tip>

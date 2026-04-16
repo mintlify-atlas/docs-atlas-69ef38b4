@@ -1,0 +1,291 @@
+---
+title: "Asset Manager: Images, Videos & Media in GrapesJS"
+description: "Learn how to configure, upload, and manage media assets in GrapesJS—including programmatic API usage, upload events, and building a custom Asset Manager UI."
+---
+
+The Asset Manager is GrapesJS's built-in module for handling media files such as images and other resources used across your project. It ships with a drag-and-drop uploader, a browsable asset grid, and a fully documented API so you can programmatically add, filter, or remove assets at any time. By default the module understands `image` assets, and the modal opens automatically whenever a user interacts with an image component in the canvas.
+
+## Configuration
+
+Pass an `assetManager` object to `grapesjs.init()` to set defaults. You can retrieve the live config object later with `editor.AssetManager.getConfig()`.
+
+```javascript
+const editor = grapesjs.init({
+  container: '#gjs',
+  assetManager: {
+    // Pre-load assets on startup
+    assets: [
+      'https://example.com/images/photo1.jpg',
+      {
+        type: 'image',
+        src: 'https://example.com/images/photo2.jpg',
+        height: 350,
+        width: 250,
+        name: 'Hero photo',
+      },
+    ],
+    // Upload endpoint — set false to disable uploads
+    upload: 'https://your-api.example.com/upload',
+    // POST field name for the file payload
+    uploadName: 'files',
+    // Automatically add uploaded assets from the server response
+    autoAdd: true,
+    // Embed images as Base64 when no upload endpoint is configured
+    embedAsBase64: true,
+  },
+});
+```
+
+<AccordionGroup>
+  <Accordion title="Full AssetManagerConfig reference">
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `assets` | `(string \| object)[]` | `[]` | Assets pre-loaded at startup |
+| `upload` | `string \| false` | `''` | Upload endpoint URL; `false` disables uploads |
+| `uploadName` | `string` | `'files'` | POST field name for uploaded files |
+| `headers` | `object` | `{}` | Extra headers sent with upload requests |
+| `params` | `object` | `{}` | Extra POST params (e.g. CSRF token) |
+| `credentials` | `RequestCredentials` | `'include'` | Fetch credentials setting |
+| `multiUpload` | `boolean` | `true` | Allow multiple files per request |
+| `autoAdd` | `boolean` | `true` | Auto-add assets returned in the upload response |
+| `embedAsBase64` | `boolean` | `true` | Embed images as Base64 when no upload URL is set |
+| `custom` | `boolean \| object` | `false` | Replace the default UI with a custom one |
+| `showUrlInput` | `boolean` | `true` | Show the URL input in the modal |
+
+  </Accordion>
+</AccordionGroup>
+
+## Adding assets
+
+<Tabs>
+  <Tab title="At init time">
+
+```javascript
+const editor = grapesjs.init({
+  assetManager: {
+    assets: [
+      'https://example.com/img1.jpg',
+      {
+        type: 'image',
+        src: 'https://example.com/img2.jpg',
+        height: 350,
+        width: 250,
+        name: 'Product banner',
+      },
+    ],
+  },
+});
+```
+
+  </Tab>
+  <Tab title="Via API">
+
+```javascript
+const am = editor.AssetManager;
+
+// Single URL string
+am.add('https://example.com/img.jpg');
+
+// Array of strings or objects
+am.add([
+  { category: 'heroes', src: 'https://example.com/hero1.jpg' },
+  { category: 'heroes', src: 'https://example.com/hero2.jpg' },
+  { category: 'icons',  src: 'https://example.com/icon1.png' },
+]);
+```
+
+  </Tab>
+</Tabs>
+
+### Retrieving and removing assets
+
+```javascript
+const am = editor.AssetManager;
+
+// Retrieve by src URL
+const asset = am.get('https://example.com/img.jpg');
+
+// Update a property
+asset.set({ src: 'https://example.com/new-img.jpg' });
+
+// Remove by instance or src string
+am.remove(asset);
+am.remove('https://example.com/img.jpg');
+```
+
+### Filtering the visible collection
+
+The Asset Manager tracks two separate collections internally:
+
+- **global** (`am.getAll()`) — every asset that has been added
+- **visible** (`am.getAllVisible()`) — the subset currently rendered in the modal
+
+```javascript
+const assets = am.getAll();
+
+// Show only assets tagged 'heroes'
+am.render(assets.filter((a) => a.get('category') === 'heroes'));
+
+am.getAll().length;        // still the full count
+am.getAllVisible().length;  // only the filtered subset
+```
+
+## Upload configuration
+
+The default modal includes a drag-and-drop uploader. Point it at your server endpoint and the module handles the rest.
+
+```javascript
+const editor = grapesjs.init({
+  assetManager: {
+    upload: 'https://api.example.com/upload',
+    uploadName: 'files',
+    headers: { Authorization: 'Bearer <token>' },
+    params: { _csrf: 'token-value' },
+    // Override the HTTP method or other fetch options
+    fetchOptions: (opts) => ({ ...opts, method: 'PUT' }),
+  },
+});
+```
+
+Your server must respond with a JSON object containing a `data` array when `autoAdd` is enabled:
+
+```json
+{
+  "data": [
+    "https://cdn.example.com/uploaded-image.png",
+    {
+      "src": "https://cdn.example.com/uploaded-image2.png",
+      "type": "image",
+      "height": 100,
+      "width": 200
+    }
+  ]
+}
+```
+
+### Upload events
+
+```javascript
+editor.on('asset:upload:start', () => {
+  showLoadingSpinner();
+});
+
+editor.on('asset:upload:end', () => {
+  hideLoadingSpinner();
+});
+
+editor.on('asset:upload:error', (err) => {
+  notifyUser('Upload failed: ' + err.message);
+});
+
+editor.on('asset:upload:response', (response) => {
+  console.log('Upload response:', response);
+});
+```
+
+## Opening the Asset Manager programmatically
+
+Use `am.open()` to launch the modal with a custom selection callback.
+
+```javascript
+const am = editor.AssetManager;
+
+am.open({
+  types: ['image'], // default
+  select(asset, complete) {
+    const selected = editor.getSelected();
+    if (selected && selected.is('image')) {
+      selected.addAttributes({ src: asset.getSrc() });
+      // close on double-click (complete === true)
+      complete && am.close();
+    }
+  },
+});
+```
+
+## Custom Asset Manager UI
+
+When you need search, filters, or a completely different layout, replace the default UI entirely. Set `custom: true` and subscribe to the `asset:custom` event—the editor stops rendering its built-in modal and passes control to your code.
+
+<Steps>
+  <Step title="Declare custom mode">
+
+```javascript
+const editor = grapesjs.init({
+  assetManager: {
+    custom: true,
+  },
+});
+```
+
+  </Step>
+  <Step title="Listen to asset:custom">
+
+```javascript
+editor.on('asset:custom', (props) => {
+  // props.open      — boolean, whether the manager should be visible
+  // props.assets    — Asset[] — all available assets
+  // props.types     — string[] — requested asset types, e.g. ['image']
+  // props.close     — () => void — call to close the manager
+  // props.remove    — (asset) => void — remove an asset
+  // props.select    — (asset, complete) => void — select an asset
+  // props.container — HTMLElement — mount point inside the GrapesJS modal
+
+  // Mount your UI into props.container or show your own modal
+  renderMyAssetPicker(props);
+});
+```
+
+  </Step>
+  <Step title="Implement open/close for external modals">
+
+If your Asset Manager lives entirely outside the GrapesJS modal, use the `custom.open` / `custom.close` hooks instead:
+
+```javascript
+const editor = grapesjs.init({
+  assetManager: {
+    custom: {
+      open(props) {
+        // Open your external asset library
+        myAssetLibrary.show(props);
+        // Notify GrapesJS when the user closes it
+        myAssetLibrary.on('close', () => props.close());
+      },
+      close(props) {
+        myAssetLibrary.hide();
+      },
+    },
+  },
+});
+```
+
+  </Step>
+</Steps>
+
+<Warning>
+When using an external modal, you must call `props.close()` when the user dismisses it. Otherwise GrapesJS will believe the Asset Manager is still open and block other interactions.
+</Warning>
+
+## Events reference
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `asset:add` | `Asset` | New asset added to the collection |
+| `asset:remove` | `Asset` | Asset removed |
+| `asset:update` | `Asset, changes` | Asset property updated |
+| `asset:open` | — | Asset Manager modal opened |
+| `asset:close` | — | Asset Manager modal closed |
+| `asset:upload:start` | — | Upload request started |
+| `asset:upload:end` | `result` | Upload request finished |
+| `asset:upload:error` | `Error` | Upload failed |
+| `asset:upload:response` | `response` | Raw upload response received |
+| `asset:custom` | `AssetsCustomData` | Triggered when `custom` mode is active |
+| `asset` | `{ event, model, ... }` | Catch-all for all asset events |
+
+```javascript
+// Catch-all example
+editor.on('asset', ({ event, model }) => {
+  console.log('Asset event:', event, model);
+});
+```

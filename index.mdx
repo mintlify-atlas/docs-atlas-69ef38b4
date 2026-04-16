@@ -1,97 +1,81 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "GrapesJS: Open-Source Web Builder Framework"
+description: "GrapesJS is a free, open-source web builder framework for creating drag-and-drop page and template editors. No coding required for end users."
 ---
 
-## Setting up
+GrapesJS is a powerful, open-source **web builder framework** that lets you embed a fully functional drag-and-drop editor into any web application. It provides a rich set of APIs and a modular architecture so you can build custom page builders, email editors, newsletter creators, and site generators — all without imposing a rigid UI on your users.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket" href="/getting-started">
+    Build your first GrapesJS editor from scratch in minutes with this step-by-step guide.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Explore all available configuration options to tailor the editor to your needs.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Components" icon="puzzle-piece" href="/concepts/components">
+    Learn how GrapesJS components work and how to create custom types with their own behaviors.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Plugin System" icon="plug" href="/plugins/overview">
+    Extend the editor with plugins — from simple block additions to full custom modules.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What you can build
 
-Everything you need to create world-class documentation.
+GrapesJS is a framework, not a finished product. You define the interface; it provides the engine. Common use cases include:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- **Page builders** — Drag sections, columns, and content blocks onto a canvas
+- **Email/newsletter editors** — Compose responsive HTML emails visually
+- **Template editors** — Let users customize pre-built layouts without touching code
+- **Site generators** — Combine GrapesJS with a storage backend for full website management
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Drag-and-drop canvas" icon="hand-pointer" href="/concepts/canvas">
+    An iframe-based canvas where users visually compose HTML pages by dragging components.
+  </Card>
+  <Card title="Block Manager" icon="table-cells" href="/concepts/blocks">
+    Reusable HTML snippets users can drag onto the canvas; fully customizable per project.
+  </Card>
+  <Card title="Style Manager" icon="paint-brush" href="/concepts/styles">
+    A visual CSS editor organized into sectors and properties — no code required for styling.
+  </Card>
+  <Card title="Data Sources" icon="database" href="/modules/data-sources">
+    Bind dynamic data to components, styles, and traits using the DataSources module.
+  </Card>
+  <Card title="Storage Manager" icon="floppy-disk" href="/modules/storage">
+    Persist editor state locally or to a remote API with built-in or custom storage adapters.
+  </Card>
+  <Card title="Multi-page support" icon="file-lines" href="/modules/pages">
+    Manage multiple pages within a single editor session using the Page Manager.
+  </Card>
+</CardGroup>
+
+## Explore the API
+
+<CardGroup cols={2}>
+  <Card title="Editor API" icon="code" href="/api/editor">
+    The top-level API — initialize, configure, and control the entire editor instance.
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/components">
+    Full reference for all modules: Components, Blocks, Styles, Storage, and more.
+  </Card>
+</CardGroup>
+
+## Quick setup
+
+<Steps>
+  <Step title="Install GrapesJS">
+    Add GrapesJS to your project via npm or a CDN script tag.
+  </Step>
+  <Step title="Initialize the editor">
+    Call `grapesjs.init({ container: '#gjs' })` with your configuration object.
+  </Step>
+  <Step title="Add blocks and components">
+    Define drag-and-drop blocks and custom component types for your use case.
+  </Step>
+  <Step title="Connect storage">
+    Configure the Storage Manager to persist and load project data from your backend.
+  </Step>
+</Steps>

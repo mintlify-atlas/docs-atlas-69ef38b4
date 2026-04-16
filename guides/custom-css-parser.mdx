@@ -1,0 +1,231 @@
+---
+title: "Use a Custom CSS Parser in GrapesJS"
+description: "Replace GrapesJS's built-in CSSOM parser with a custom function to get consistent, predictable CSS rule output across all browsers."
+---
+
+GrapesJS parses CSS using the browser's native CSSOM — but CSSOM output is notoriously inconsistent across browsers: colors get converted, property order changes, shorthand values are mangled, and CSS custom properties inside shorthand properties serialize to empty strings. If you import existing HTML/CSS templates or let users paste their own styles, these inconsistencies will cause data loss or visual drift. Swapping in a custom CSS parser gives you full control over parsing behavior and ensures what goes in comes back out unchanged.
+
+<Note>
+  Custom CSS parser support requires GrapesJS v0.14.33 or higher.
+</Note>
+
+## Why the default parser falls short
+
+GrapesJS parses CSS strings by injecting them into a temporary `<style>` element and reading back the browser's CSSOM. This works without any third-party dependencies, but the CSSOM has significant inconsistencies:
+
+- **Color conversion** — some browsers convert `#FF0000` to `rgb(255, 0, 0)`.
+- **Value reordering** — properties like `box-shadow` may come back with values in a different order.
+- **Shorthand expansion** — `border: 2px solid red` may be split into `border-width`, `border-style`, `border-color`.
+- **CSS variables in shorthands** — per the [CSS spec](https://drafts.csswg.org/css-variables-1/#variables-in-shorthands), variables inside shorthand properties serialize to an empty string. `background: var(--my-var)` will not round-trip correctly through CSSOM.
+- **Vendor prefix injection** — WebKit-based browsers may inject `-webkit-*` properties that were never in the original CSS.
+
+If you start from an empty canvas and only use GrapesJS's generated JSON, none of this matters. But the moment you load existing CSS — via `fromElement`, the Code Manager, or a custom-code plugin — you are at the mercy of these inconsistencies.
+
+## The `CustomParserCss` function signature
+
+The custom parser is a plain function. Its type, from `parser/config/config.ts`, is:
+
+```typescript
+export interface ParsedCssRule {
+  selectors: string | string[];
+  style: Record<string, string>;
+  atRule?: string;
+  params?: string;
+}
+
+export type CustomParserCss = (input: string, editor: Editor) => ParsedCssRule[];
+```
+
+Your function receives the raw CSS string and the current editor instance, and must return an array of `ParsedCssRule` objects. The array must always be returned, even if it is empty.
+
+## Rule object reference
+
+Each object in the returned array represents one CSS rule:
+
+| Key | Required | Description | Example |
+|---|---|---|---|
+| `selectors` | Yes | Selector string(s). Return `''` for rules with no selector (e.g. `@font-face`). | `'.card, div > .title'` |
+| `style` | Yes | CSS declarations as a plain object. | `{ color: 'red', 'font-size': '14px' }` |
+| `atRule` | No | The at-rule name, without the `@`. | `'media'`, `'keyframes'`, `'font-face'` |
+| `params` | No | Parameters that follow the at-rule name. | `'screen and (min-width: 480px)'` |
+
+## Configuring the parser
+
+Pass your function via the `parser.parserCss` init option. This is the recommended approach because the parser is active from the very first import.
+
+```js
+const parserCss = (css, editor) => {
+  const result = [];
+  // ... parse the CSS string using your preferred library
+  result.push({
+    selectors: '.someclass, div .otherclass',
+    style: { color: 'red' },
+  });
+  return result; // must always return an array
+};
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  parser: {
+    parserCss,
+  },
+});
+```
+
+You can also set it after initialization, though this means any CSS already parsed during `init` used the default parser:
+
+```js
+editor.setCustomParserCss(parserCss);
+```
+
+## Rule shape examples
+
+The following examples show the exact input CSS and the expected output array your parser should produce for each case.
+
+<CodeGroup>
+
+```js Standard rule
+// Input
+`.card { background-color: #fff; padding: 16px; }`
+
+// Output
+[
+  {
+    selectors: '.card',
+    style: {
+      'background-color': '#fff',
+      padding: '16px',
+    },
+  },
+]
+```
+
+```js @font-face
+// Input
+`@font-face {
+  font-family: "Font Name";
+  src: url("https://font-url.eot");
+}`
+
+// Output
+[
+  {
+    selectors: '',
+    atRule: 'font-face',
+    style: {
+      'font-family': '"Font Name"',
+      src: 'url("https://font-url.eot")',
+    },
+  },
+]
+```
+
+```js @keyframes
+// Input
+`@keyframes keyframe-name {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}`
+
+// Output
+[
+  {
+    params: 'keyframe-name',
+    selectors: 'from',
+    atRule: 'keyframes',
+    style: { opacity: '0' },
+  },
+  {
+    params: 'keyframe-name',
+    selectors: 'to',
+    atRule: 'keyframes',
+    style: { opacity: '1' },
+  },
+]
+```
+
+```js @media query
+// Input
+`@media screen and (min-width: 480px) {
+  body { background-color: lightgreen; }
+  .class-test, .class-test2:hover { color: blue !important; }
+}`
+
+// Output
+[
+  {
+    params: 'screen and (min-width: 480px)',
+    selectors: 'body',
+    atRule: 'media',
+    style: { 'background-color': 'lightgreen' },
+  },
+  {
+    params: 'screen and (min-width: 480px)',
+    selectors: '.class-test, .class-test2:hover',
+    atRule: 'media',
+    style: { color: 'blue !important' },
+  },
+]
+```
+
+```js CSS custom properties
+// Input
+`:root {
+  --some-color: red;
+  --some-width: 55px;
+}`
+
+// Output
+[
+  {
+    selectors: ':root',
+    style: {
+      '--some-color': 'red',
+      '--some-width': '55px',
+    },
+  },
+]
+```
+
+</CodeGroup>
+
+## Implementing a custom parser
+
+The most reliable approach is to use a battle-tested CSS parser library and map its output to GrapesJS's `ParsedCssRule` format. Here is a minimal example of the pattern:
+
+```js
+const parserCss = (css, editor) => {
+  const result = [];
+
+  // Use your preferred CSS parsing library here.
+  // The key contract is: return an array of ParsedCssRule objects.
+
+  // Example: flat rule
+  result.push({
+    selectors: '.my-class',
+    style: { color: 'red' },
+  });
+
+  // Example: @media rule
+  result.push({
+    atRule: 'media',
+    params: 'screen and (max-width: 768px)',
+    selectors: '.my-class',
+    style: { 'font-size': '14px' },
+  });
+
+  return result;
+};
+```
+
+<Tip>
+  The `editor` argument gives you access to the full GrapesJS editor instance, so you can read editor state or component data if your parsing logic needs context.
+</Tip>
+
+## Available plugins
+
+Rather than writing a parser from scratch, consider using an existing plugin. These are well-tested and handle the full CSS grammar:
+
+- [**grapesjs-parser-postcss**](https://github.com/GrapesJS/parser-postcss) — powered by [PostCSS](https://github.com/postcss/postcss), the most widely used CSS parser in the JavaScript ecosystem. Recommended for production use.
+
+If you need to build your own, studying the source of `grapesjs-parser-postcss` is the fastest way to understand all the edge cases you will need to handle.

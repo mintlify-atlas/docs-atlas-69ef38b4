@@ -1,0 +1,454 @@
+---
+title: "Data Sources API — Dynamic Data Binding in GrapesJS"
+description: "Reference for editor.DataSources in GrapesJS. Add data sources, bind records to components and styles via DataVariable, and filter with DataCondition."
+---
+
+The `DataSourceManager` module (`editor.DataSources`) lets you wire live data into every layer of GrapesJS — component content, CSS properties, and component traits — without writing custom renderers. A **DataSource** holds an array of **DataRecords**, and you reference those records in your component tree through a simple dot-notation path like `sourceId.recordId.propertyName`.
+
+## Configuration
+
+```js
+const editor = grapesjs.init({ container: '#gjs' });
+const dsm = editor.DataSources;
+```
+
+DataSources have no required init-time config. They are added and managed entirely through the runtime API.
+
+---
+
+## Methods
+
+### `add(props, opts?)`
+
+Adds a new DataSource to the manager and returns it. If no `id` is provided, one is generated automatically.
+
+```ts
+add<DRProps extends DataRecordProps>(
+  props: DataSourceProps<DRProps>,
+  opts?: AddOptions
+): DataSource<DRProps>
+```
+
+<ParamField path="props" type="DataSourceProps" required>
+  Properties for the new DataSource.
+
+  <Expandable title="DataSourceProps fields">
+    <ParamField path="props.id" type="string" required>
+      Unique identifier for this DataSource.
+    </ParamField>
+    <ParamField path="props.records" type="DataRecordProps[]">
+      Initial array of record objects. Each record must have an `id` string field plus any additional key/value pairs.
+    </ParamField>
+    <ParamField path="props.transformers" type="DataSourceTransformers">
+      Optional validation/transformation functions applied to record mutations.
+    </ParamField>
+    <ParamField path="props.skipFromStorage" type="boolean">
+      When `true`, this DataSource is excluded from the project JSON saved by the StorageManager. Default: `false`.
+    </ParamField>
+    <ParamField path="props.schema" type="DataSourceSchema">
+      Optional field schema definitions (type, label, description, relations) used for validation and tooling.
+    </ParamField>
+    <ParamField path="props.provider" type="string | DataSourceProviderDefinitionProps">
+      Optional external data provider configuration. When set, records are loaded from a remote URL via fetch.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="opts" type="AddOptions">
+  Collection add options (e.g. `{ at: 0 }` to prepend).
+</ParamField>
+
+```js
+const ds = editor.DataSources.add({
+  id: 'product-list',
+  records: [
+    { id: 'p1', name: 'Widget', price: '$9.99' },
+    { id: 'p2', name: 'Gadget', price: '$19.99' },
+  ],
+});
+```
+
+---
+
+### `get(id)`
+
+Returns the DataSource with the given id, or `undefined` if it does not exist.
+
+```ts
+get(id: string): DataSource | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The DataSource identifier.
+</ParamField>
+
+```js
+const ds = editor.DataSources.get('product-list');
+```
+
+---
+
+### `getAll()`
+
+Returns an array of all DataSource instances currently registered.
+
+```ts
+getAll(): DataSource[]
+```
+
+```js
+const all = editor.DataSources.getAll();
+console.log(all.length);
+```
+
+---
+
+### `remove(id, opts?)`
+
+Removes a DataSource by id (or by passing the DataSource instance directly). Returns the removed DataSource.
+
+```ts
+remove(id: string | DataSource, opts?: RemoveOptions): DataSource
+```
+
+<ParamField path="id" type="string | DataSource" required>
+  The DataSource identifier or the DataSource instance to remove.
+</ParamField>
+
+```js
+editor.DataSources.remove('product-list');
+```
+
+---
+
+### `getValue(path, defaultValue?, opts?)`
+
+Resolves a dot-notation path against all DataSources and returns the value.
+
+```ts
+getValue(path: string | string[], defaultValue?: any, opts?: { context?: Record<string, any> }): any
+```
+
+<ParamField path="path" type="string | string[]" required>
+  Dot-notation path in the format `dataSourceId.recordId.propertyName`.
+</ParamField>
+<ParamField path="defaultValue" type="any">
+  Value returned when the path cannot be resolved.
+</ParamField>
+
+```js
+const price = editor.DataSources.getValue('product-list.p1.price', 'N/A');
+// '$9.99'
+```
+
+---
+
+### `setValue(path, value)`
+
+Sets a value at the given path, updating the DataRecord in-place. Returns `true` on success.
+
+```ts
+setValue(path: string, value: any): boolean
+```
+
+```js
+editor.DataSources.setValue('product-list.p1.price', '$12.99');
+```
+
+---
+
+### `fromPath(path)`
+
+Parses a dot-notation path and returns `[DataSource, DataRecord, propertyPath]`. Useful when you need direct access to record instances.
+
+```ts
+fromPath(path: string): [DataSource?, DataRecord?, string?]
+```
+
+```js
+const [ds, record, prop] = editor.DataSources.fromPath('product-list.p1.price');
+```
+
+---
+
+## DataSource instance methods
+
+Once you have a DataSource instance, you can manipulate its records directly.
+
+### `addRecord(record, opts?)`
+
+Adds a new record and returns the `DataRecord` instance.
+
+```ts
+addRecord(record: DataRecordProps, opts?: AddOptions): DataRecord
+```
+
+```js
+const ds = editor.DataSources.get('product-list');
+ds.addRecord({ id: 'p3', name: 'Doohickey', price: '$4.99' });
+```
+
+### `getRecord(id)`
+
+Returns a single `DataRecord` by id, or `undefined`.
+
+```ts
+getRecord(id: string | number): DataRecord | undefined
+```
+
+### `getRecords()`
+
+Returns all records as an array of `DataRecord` instances.
+
+```ts
+getRecords(): DataRecord[]
+```
+
+### `removeRecord(id, opts?)`
+
+Removes a record by id and returns it, or `undefined`. Throws if the record is immutable and `opts.dangerously` is not set.
+
+```ts
+removeRecord(id: string | number, opts?: RemoveOptions): DataRecord | undefined
+```
+
+### `setRecords(records)`
+
+Replaces all records in this DataSource.
+
+```ts
+setRecords(records: DataRecordProps[]): void
+```
+
+---
+
+## DataRecord
+
+A `DataRecord` is a plain Backbone model enriched with path tracking. Its `attributes` object contains the `id` you supplied plus any custom key/value pairs.
+
+```js
+const record = ds.getRecord('p1');
+record.get('price'); // '$9.99'
+record.set('price', '$12.99'); // triggers reactive updates
+record.getPath();          // 'product-list.p1'
+record.getPath('price');   // 'product-list.p1.price'
+```
+
+<ResponseField name="id" type="string">
+  Unique record identifier within the DataSource.
+</ResponseField>
+<ResponseField name="mutable" type="boolean">
+  Controls whether the record can be modified or removed. Default: `true`. Set to `false` for read-only reference data.
+</ResponseField>
+
+```js
+// Immutable record — modifications throw an error
+editor.DataSources.add({
+  id: 'config',
+  records: [
+    { id: 'theme', color: '#3b82f6', mutable: false },
+  ],
+});
+```
+
+---
+
+## Data binding
+
+### DataVariable — binding component content
+
+Use a component of type `'data-variable'` as a child to bind text content to a DataSource path.
+
+```ts
+interface DataVariableProps {
+  type: 'data-variable';
+  path?: string;        // dot-notation path to the data value
+  defaultValue?: string; // value when path cannot be resolved
+}
+```
+
+```js
+editor.addComponents([
+  {
+    tagName: 'h1',
+    type: 'text',
+    components: [
+      {
+        type: 'data-variable',
+        path: 'product-list.p1.name',
+        defaultValue: 'Unnamed Product',
+      },
+    ],
+  },
+]);
+```
+
+### StyleDataVariable — binding CSS properties
+
+Pass a `DataVariableProps` object as a CSS property value to bind styles to DataSource data:
+
+```js
+editor.addComponents([
+  {
+    tagName: 'section',
+    style: {
+      'background-color': {
+        type: 'data-variable',
+        path: 'config.theme.color',
+        defaultValue: '#ffffff',
+      },
+    },
+  },
+]);
+```
+
+### TraitDataVariable — binding trait values
+
+Bind a trait's initial value to a DataSource path by passing a `DataVariableProps` object as the trait `value`:
+
+```js
+editor.addComponents([
+  {
+    tagName: 'input',
+    traits: [
+      {
+        type: 'text',
+        label: 'Placeholder',
+        name: 'placeholder',
+        value: {
+          type: 'data-variable',
+          path: 'form-config.defaults.placeholder',
+          defaultValue: 'Enter text…',
+        },
+      },
+    ],
+  },
+]);
+```
+
+---
+
+## DataCondition — conditional rendering
+
+A `DataCondition` evaluates a boolean expression and returns one of two outputs. Use it anywhere a `DataVariable` is accepted.
+
+```ts
+interface DataConditionProps {
+  type: 'data-condition';
+  condition: {
+    left: any;           // value or DataVariableProps
+    operator: string;    // comparison operator
+    right: any;          // value or DataVariableProps
+  };
+  ifTrue?: any;          // output when condition is truthy
+  ifFalse?: any;         // output when condition is falsy
+}
+```
+
+Available operators include string operators (`equals`, `equalsIgnoreCase`, `contains`, `startsWith`, `endsWith`), number operators (`greaterThan`, `lessThan`, `greaterThanOrEquals`, `lessThanOrEquals`), boolean operators (`isTrue`, `isFalse`), and any-type operators (`isDefined`, `isUndefined`).
+
+```js
+editor.addComponents([
+  {
+    tagName: 'span',
+    components: [
+      {
+        type: 'data-condition',
+        condition: {
+          left: { type: 'data-variable', path: 'cart.summary.total' },
+          operator: 'greaterThan',
+          right: 0,
+        },
+        ifTrue: 'Items in cart',
+        ifFalse: 'Cart is empty',
+      },
+    ],
+  },
+]);
+```
+
+---
+
+## Transformers
+
+Transformers let you intercept and transform record values before they are committed.
+
+### `onRecordSetValue`
+
+Called every time a record property is set (via `record.set(...)`). Return the (potentially modified) value. Throw to reject the update.
+
+```ts
+interface DataSourceTransformers {
+  onRecordSetValue?: (args: {
+    id: string | number;   // record id
+    key: string;           // property being set
+    value: any;            // incoming value
+  }) => any;
+}
+```
+
+```js
+editor.DataSources.add({
+  id: 'validated-source',
+  records: [{ id: 'r1', score: 0 }],
+  transformers: {
+    onRecordSetValue: ({ id, key, value }) => {
+      if (key === 'score') {
+        if (typeof value !== 'number') throw new Error('score must be a number');
+        return Math.max(0, Math.min(100, value)); // clamp to 0-100
+      }
+      return value;
+    },
+  },
+});
+```
+
+<Tip>
+  Pass `{ avoidTransformers: true }` as the options argument to `record.set()` to skip transformer execution.
+</Tip>
+
+---
+
+## Storage integration
+
+By default, all DataSources are included in the project JSON serialised by the StorageManager under the `dataSources` key. Set `skipFromStorage: true` to exclude a DataSource (for example, a runtime-only data feed).
+
+```js
+editor.DataSources.add({
+  id: 'runtime-feed',
+  records: [],
+  skipFromStorage: true, // not saved in project JSON
+});
+```
+
+---
+
+## Events
+
+Listen to DataSource events on the editor instance:
+
+```js
+editor.on('data:add', (dataSource) => {
+  console.log('New data source:', dataSource.id);
+});
+
+editor.on('data:path', ({ dataSource, dataRecord, path }) => {
+  console.log('Data changed at path:', path);
+});
+
+editor.on('data', ({ event, ...rest }) => {
+  console.log('DataSources catch-all event:', event);
+});
+```
+
+| Event | Callback arguments | Description |
+|---|---|---|
+| `data:add` | `(dataSource, opts)` | A DataSource was added. |
+| `data:remove` | `(dataSource, opts)` | A DataSource was removed. |
+| `data:update` | `(dataSource, opts)` | A DataSource was updated. |
+| `data:path` | `({ dataSource, dataRecord, path, options })` | A DataRecord property changed. Path identifies the changed field. |
+| `data:pathSource:<SOURCE_ID>` | `({ dataSource, dataRecord, path, options })` | Property changed within a specific DataSource. |
+| `data:provider:load` | `({ dataSource, result })` | A provider-backed DataSource finished loading. |
+| `data:provider:load:error` | `({ dataSource, error })` | A provider load failed. |
+| `data:provider:loadAll` | `()` | All provider-backed DataSources finished loading. |
+| `data` | `({ event, model?, options })` | Catch-all for all `data:*` events. |

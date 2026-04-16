@@ -1,0 +1,304 @@
+---
+title: "GrapesJS Keymaps Module API Reference"
+description: "Reference for editor.Keymaps in GrapesJS. Register keyboard shortcuts, bind them to commands or handlers, manage default keymaps, and listen to keymap events."
+---
+
+The Keymaps module (`editor.Keymaps`) manages keyboard shortcuts for the editor. Each keymap maps one or more key combinations to either a command ID or a custom handler function. GrapesJS ships with sensible defaults (undo, redo, copy, paste, navigation), and the module makes it straightforward to add, replace, or remove shortcuts in your application.
+
+```javascript
+const keymaps = editor.Keymaps;
+
+editor.on('keymap:emit', (id, shortcut, event) => {
+  console.log(`Keymap "${id}" triggered by "${shortcut}"`);
+});
+```
+
+<Tip>Declare default keymaps at init time via the `keymaps.defaults` config key. This is preferred over calling `add()` after init when you want shortcuts to be available immediately.</Tip>
+
+---
+
+## Key format
+
+Key combinations follow these conventions:
+
+- Use `+` to combine modifier keys with a key: `ctrl+z`, `shift+delete`
+- Use `,` (with a space) to register multiple shortcuts for the same keymap: `⌘+z, ctrl+z`
+- Supported modifiers: `ctrl`, `shift`, `alt`, `meta`, `⌘` (macOS Command), `⌥` (macOS Option)
+- Special keys: `backspace`, `delete`, `enter`, `escape`, `tab`, `space`, and standard key names
+
+```javascript
+// Single shortcut
+keymaps.add('my:save', 'ctrl+s', 'my:save-command', { prevent: true });
+
+// Cross-platform shortcut (macOS + Windows/Linux)
+keymaps.add('my:undo', '⌘+z, ctrl+z', 'core:undo');
+
+// Multiple modifiers
+keymaps.add('my:special', 'ctrl+shift+p', (editor) => {
+  console.log('triggered');
+});
+```
+
+---
+
+## Default keymaps
+
+The following keyboard shortcuts are active out of the box. They can be overridden by calling `add()` with the same ID, or removed with `remove()`.
+
+| ID | Keys | Command |
+|---|---|---|
+| `core:undo` | `⌘+z`, `ctrl+z` | `core:undo` |
+| `core:redo` | `⌘+shift+z`, `ctrl+shift+z` | `core:redo` |
+| `core:copy` | `⌘+c`, `ctrl+c` | `core:copy` |
+| `core:paste` | `⌘+v`, `ctrl+v` | `core:paste` |
+| `core:component-next` | `s` | `core:component-next` |
+| `core:component-prev` | `w` | `core:component-prev` |
+| `core:component-enter` | `d` | `core:component-enter` |
+| `core:component-exit` | `a` | `core:component-exit` |
+| `core:component-delete` | `backspace`, `delete` | `core:component-delete` |
+
+<Note>Keymap handlers only fire when the canvas is focused and no text input is active. This prevents shortcuts from interfering with typing inside component trait fields or the code editor.</Note>
+
+---
+
+## Init-time configuration
+
+```javascript
+const editor = grapesjs.init({
+  keymaps: {
+    defaults: {
+      'my-plugin:save': {
+        keys: '⌘+s, ctrl+s',
+        handler: 'my-plugin:save-command',
+        opts: { prevent: true },
+      },
+      'my-plugin:inspect': {
+        keys: 'ctrl+i',
+        handler: (editor) => {
+          console.log(editor.getSelected());
+        },
+      },
+    },
+  },
+});
+```
+
+---
+
+## Methods
+
+### add
+
+Register a new keymap. If a keymap with the same `id` already exists it is removed first.
+
+```typescript
+add(
+  id: string,
+  keys: string,
+  handler: string | ((editor: Editor, sender: any, opts: any) => any),
+  opts?: KeymapOptions
+): Keymap
+```
+
+<ParamField path="id" type="string" required>
+  Unique keymap identifier. Convention: `namespace:name` (e.g. `'my-plugin:save'`).
+</ParamField>
+
+<ParamField path="keys" type="string" required>
+  One or more key combinations separated by `, `. Supports `⌘`, `ctrl`, `shift`, `alt`, `meta`, and standard key names.
+</ParamField>
+
+<ParamField path="handler" type="string | Function" required>
+  Either a command ID (string) to run via `editor.Commands.run()`, or a function that receives `(editor, sender, opts)`.
+</ParamField>
+
+<ParamField path="opts.force" type="boolean" default="false">
+  Execute the handler even when a text input is focused.
+</ParamField>
+
+<ParamField path="opts.prevent" type="boolean" default="false">
+  Call `preventDefault()` on the original keyboard event, suppressing the browser's default action (e.g. prevent `ctrl+s` from triggering the browser's Save dialog).
+</ParamField>
+
+<CodeGroup>
+
+```javascript Command ID handler
+keymaps.add('ns:my-keymap', '⌘+s, ctrl+s', 'core:undo', {
+  prevent: true,
+});
+```
+
+```javascript Function handler
+keymaps.add('ns:my-keymap', '⌘+j, ctrl+j', (editor, sender, opts) => {
+  console.log('Key pressed', opts.h.shortcut);
+  editor.log('Keymap fired', { ns: 'ns', level: 'info' });
+});
+```
+
+</CodeGroup>
+
+Returns the registered `Keymap` object: `{ id, keys, handler }`.
+
+---
+
+### get
+
+Retrieve a registered keymap by ID.
+
+```typescript
+get(id: string): Keymap | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The keymap ID to look up.
+</ParamField>
+
+```javascript
+const km = keymaps.get('core:undo');
+// { id: 'core:undo', keys: '⌘+z, ctrl+z', handler: 'core:undo' }
+```
+
+---
+
+### getAll
+
+Return all registered keymaps as a plain object keyed by ID.
+
+```typescript
+getAll(): Record<string, Keymap>
+```
+
+```javascript
+const all = keymaps.getAll();
+Object.entries(all).forEach(([id, km]) => {
+  console.log(id, '->', km.keys);
+});
+```
+
+---
+
+### remove
+
+Remove a keymap by ID and unbind its key listener(s).
+
+```typescript
+remove(id: string): Keymap | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The keymap ID to remove.
+</ParamField>
+
+Returns the removed `Keymap` object, or `undefined` if no keymap with that ID was found.
+
+```javascript
+// Remove a built-in shortcut
+keymaps.remove('core:component-delete');
+
+// Remove and inspect what was removed
+const removed = keymaps.remove('my:shortcut');
+console.log(removed?.keys); // e.g. 'ctrl+m'
+```
+
+---
+
+### removeAll
+
+Unbind and remove all registered keymaps.
+
+```typescript
+removeAll(): this
+```
+
+```javascript
+keymaps.removeAll();
+// All shortcuts are now inactive
+```
+
+<Warning>This removes built-in shortcuts such as undo/redo as well. If you only want to clear custom keymaps, remove them individually by ID.</Warning>
+
+---
+
+## Events
+
+All keymap events fire on the editor instance.
+
+<ResponseField name="keymap:add" type="event">
+  Fired when a new keymap is registered. The keymap object is passed to the callback.
+
+  ```javascript
+  editor.on('keymap:add', (keymap) => {
+    console.log('Added keymap', keymap.id, '->', keymap.keys);
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="keymap:remove" type="event">
+  Fired when a keymap is removed. The removed keymap object is passed to the callback.
+
+  ```javascript
+  editor.on('keymap:remove', (keymap) => {
+    console.log('Removed keymap', keymap.id);
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="keymap:emit" type="event">
+  Fired each time any keymap is triggered by user input. Receives the keymap ID, the exact shortcut string that matched, and the original keyboard `Event`.
+
+  ```javascript
+  editor.on('keymap:emit', (id, shortcut, event) => {
+    console.log(`Keymap "${id}" fired via "${shortcut}"`);
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="keymap:emit:KEYMAP-ID" type="event">
+  Same as `keymap:emit` but scoped to a specific keymap ID. Replace `KEYMAP-ID` with the actual keymap identifier.
+
+  ```javascript
+  editor.on('keymap:emit:core:undo', (id, shortcut, event) => {
+    console.log('Undo shortcut pressed:', shortcut);
+  });
+  ```
+</ResponseField>
+
+---
+
+## Common patterns
+
+### Override a built-in shortcut
+
+```javascript
+// Replace the default delete shortcut with a confirmation step
+keymaps.remove('core:component-delete');
+
+keymaps.add('core:component-delete', 'backspace, delete', (editor) => {
+  if (confirm('Delete selected component?')) {
+    editor.runCommand('core:component-delete');
+  }
+}, { prevent: true });
+```
+
+### Disable all default shortcuts and define your own
+
+```javascript
+keymaps.removeAll();
+
+keymaps.add('app:undo', 'ctrl+z', 'core:undo', { prevent: true });
+keymaps.add('app:redo', 'ctrl+y', 'core:redo', { prevent: true });
+keymaps.add('app:save', 'ctrl+s', async (editor) => {
+  await editor.store();
+}, { prevent: true });
+```
+
+### Conditionally enable a shortcut
+
+```javascript
+let shortcutEnabled = false;
+
+keymaps.add('app:toggle-mode', 'ctrl+m', (editor, sender, opts) => {
+  if (!shortcutEnabled) return;
+  editor.runCommand('core:preview');
+});
+```

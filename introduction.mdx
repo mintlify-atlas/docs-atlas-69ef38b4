@@ -1,0 +1,58 @@
+---
+title: "Introduction to GrapesJS Web Builder Framework"
+description: "GrapesJS is a free, open-source web builder framework for embedding drag-and-drop page editors, email editors, and template builders into any web app."
+---
+
+GrapesJS is a free, open-source **web builder framework** — not a SaaS product or finished application. It gives you a programmable canvas, drag-and-drop blocks, component management, a visual style editor, and a plugin system, all as composable building blocks you wire together to create your own editor UI. You control the layout, the user experience, and the feature set; GrapesJS provides the engine underneath.
+
+## What you can build
+
+GrapesJS is a general-purpose framework for any tool that lets users compose HTML visually. It is most commonly used for:
+
+- **Page builders** — Allow users to drag sections, columns, and content blocks onto a canvas and export clean HTML/CSS.
+- **Email editors** — Compose responsive HTML email templates using a constrained block system suited to email clients.
+- **Newsletter tools** — Build structured, reusable newsletter layouts with inline styles and export pipelines.
+- **Site generators** — Combine GrapesJS with a storage backend and multi-page support for full website authoring workflows.
+
+## Architecture overview
+
+GrapesJS is structured as a set of coordinating modules. Each module manages a distinct concern and exposes its own API.
+
+**Canvas** — An `<iframe>`-based rendering surface where the user's HTML is displayed and interacted with. The canvas handles selection, highlighting, drag-and-drop positioning, and device preview (responsive breakpoints). See [Canvas concepts](/concepts/canvas).
+
+**Components** — Every HTML element inside the canvas is represented as a GrapesJS Component — a model/view pair. Components carry their own traits, allowed children, drag rules, and rendering logic. You can define custom component types with entirely decoupled views. See [Component concepts](/concepts/components).
+
+**Block Manager** — Blocks are the drag sources in the sidebar. Each block is a reusable snippet of HTML (or a component definition) that users drag onto the canvas. Blocks can be grouped into categories. See [Block concepts](/concepts/blocks).
+
+**Style Manager** — A visual CSS editor organized into sectors and property inputs. When a component is selected, its applicable CSS rules are surfaced here for editing. Works in conjunction with the Selector Manager. See [Style concepts](/concepts/styles).
+
+**Storage Manager** — Handles serializing editor state (components + styles) to and from a storage backend. Ships with `local` (localStorage) and `remote` (HTTP) adapters. See [Storage module](/modules/storage).
+
+**Plugin system** — Any behavior not covered by core modules can be added as a plugin. A plugin is a function that receives the editor instance and can add blocks, register component types, define commands, or mount new panels. See [Plugin overview](/plugins/overview).
+
+## Explore the docs
+
+<CardGroup cols={2}>
+  <Card title="Getting started" icon="rocket" href="/getting-started">
+    Install GrapesJS and build your first editor from scratch with blocks, panels, and storage.
+  </Card>
+  <Card title="Configuration reference" icon="gear" href="/configuration">
+    Full reference for every `EditorConfig` option — types, defaults, and descriptions.
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/concepts/components">
+    Understand the component model and learn to create custom component types.
+  </Card>
+  <Card title="Blocks" icon="table-cells" href="/concepts/blocks">
+    Define reusable drag-and-drop content blocks for your builder.
+  </Card>
+  <Card title="Style Manager" icon="paint-brush" href="/concepts/styles">
+    Configure CSS sectors and properties for the visual style editor.
+  </Card>
+  <Card title="Plugin overview" icon="plug" href="/plugins/overview">
+    Extend the editor with first- and third-party plugins.
+  </Card>
+</CardGroup>
+
+<Note>
+  GrapesJS ships with no default panel layout. The framework intentionally leaves the UI structure to you. The [Getting started](/getting-started) guide walks through assembling a complete page builder UI step by step.
+</Note>

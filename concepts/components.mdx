@@ -1,0 +1,471 @@
+---
+title: "GrapesJS Components: Model, View, and Types Guide"
+description: "Learn how GrapesJS components work as model-view pairs, how HTML parses into component definitions, built-in types, custom types, and component lifecycle hooks."
+---
+
+Every element you place on a GrapesJS canvas is a **Component** — not just a chunk of raw HTML, but a structured object that pairs a **Model** (the source of truth for data and exported code) with a **View** (the canvas rendering). This separation is what gives GrapesJS its power: you can define complex interactive behaviors, restrict where elements can be dragged, control what styles are editable, and attach rich UI in the canvas, all without touching the final HTML output.
+
+## How Components Work
+
+When you add an HTML string to the canvas, GrapesJS runs it through a pipeline: parse → recognize → instantiate → render.
+
+```js
+// Append components directly to the canvas
+editor.addComponents(`<div>
+  <img src="https://path/image" />
+  <span title="foo">Hello world!!!</span>
+</div>`);
+
+// Or append into an already-defined component
+editor.getSelected().append(`<div>...</div>`);
+
+// Insert at a specific position
+component.append('<div>...</div>', { at: 0 });
+```
+
+### Component Definition
+
+The first output of the parse step is a **Component Definition** — a plain JavaScript object that resembles a Virtual DOM node. For the HTML above, the result looks like this:
+
+```js
+{
+  tagName: 'div',
+  components: [
+    {
+      type: 'image',
+      attributes: { src: 'https://path/image' },
+    },
+    {
+      tagName: 'span',
+      type: 'text',
+      attributes: { title: 'foo' },
+      components: [{ type: 'textnode', content: 'Hello world!!!' }],
+    },
+  ],
+}
+```
+
+The key properties of a Component Definition are:
+
+| Property | Description |
+|---|---|
+| `type` | Component type identifier. Omitting it defaults to `'default'`. |
+| `tagName` | HTML tag to render. Defaults to `'div'`. |
+| `attributes` | Key-value map of HTML attributes. |
+| `components` | Nested children — string, object, or array. |
+| `style` | Inline style object, e.g. `{ color: 'red' }`. |
+| `styles` | Component-scoped CSS string, e.g. `.cls { color: red }`. |
+| `traits` | Array of trait definitions for the Traits panel. |
+| `draggable` | `true`, CSS selector string, or function. |
+| `droppable` | `true`, CSS selector string, or function. |
+| `removable` | Whether the component can be deleted from the canvas. |
+| `copyable` | Whether the component can be cloned. |
+| `stylable` | `true` or an array of allowed CSS property names. |
+| `unstylable` | Array of CSS property names to hide from the Style Manager. |
+| `script` | JavaScript to execute when the component is mounted. |
+| `content` | Raw inner content (prepended before children). |
+
+<Note>
+  Passing a Component Definition object (instead of an HTML string) skips the parse and recognition steps entirely, which is more performant for large templates.
+</Note>
+
+### Component Recognition and the Type Stack
+
+When an HTML string is parsed, the editor needs to decide which **Component Type** maps to each HTML element. It does this through the **Component Type Stack**: an ordered array of all registered types. Each element is checked top-to-bottom against every type's `isComponent` method; the first truthy match wins. Custom types are pushed to the top, so they are evaluated first. The bottom of the stack is always the `'default'` type.
+
+<Steps>
+  <Step title="Parse HTML">
+    GrapesJS parses the HTML string into a tree of raw DOM nodes.
+  </Step>
+  <Step title="Iterate the Type Stack">
+    For each node, the editor iterates the Component Type Stack from top to bottom, calling each type's `isComponent(el)` method.
+  </Step>
+  <Step title="Assign Type">
+    The first type that returns a truthy value from `isComponent` is assigned. The `type` is injected into the resulting Component Definition.
+  </Step>
+  <Step title="Instantiate Model">
+    The Component Definition is used to create a **Component instance** (the Model).
+  </Step>
+  <Step title="Render View">
+    The editor creates a **ComponentView** and renders the element into the canvas iframe.
+  </Step>
+</Steps>
+
+<Tip>
+  You can bypass parsing entirely by passing Component Definitions as objects or by using JSX syntax (supported natively when using React). This is especially beneficial when importing large HTML chunks.
+</Tip>
+
+### Working with Component Instances
+
+The `addComponents` call returns an array of the added Component instances:
+
+```js
+const component = editor.addComponents(`<div>
+  <img src="https://path/image" />
+  <span title="foo">Hello world!!!</span>
+</div>`)[0];
+
+// Read a property
+const type = component.get('type'); // e.g. 'default'
+
+// Update a property
+component.set('draggable', false);
+
+// Get all attributes
+const attrs = component.getAttributes();
+
+// Add/replace attributes
+component.addAttributes({ title: 'Updated' });
+component.setAttributes({ title: 'Replaced' });
+
+// Traverse children
+component.components().forEach((child) => console.log(child.toHTML()));
+
+// Replace inner content with HTML or Component Definitions
+component.components(`<div>New child</div>`);
+
+// Find components matching a CSS selector
+component.find('.some-class').forEach((c) => console.log(c.props()));
+
+// Export to HTML string
+const html = component.toHTML();
+
+// Export to JSON
+const json = JSON.stringify(component);
+```
+
+### Model vs. View
+
+The **Model** is the source of truth. All data — attributes, styles, children — live in the model. When you export HTML or JSON, GrapesJS traverses the model tree.
+
+The **View** is what users see in the canvas. By default it stays in sync with the model, but you can override it for custom canvas UIs (e.g. editable buttons for table rows) without affecting exported HTML.
+
+```js
+const component = editor.getSelected();
+const view = component.getView(); // ComponentView instance
+const el   = component.getEl();   // Raw DOM element in the iframe
+```
+
+---
+
+## Built-in Component Types
+
+GrapesJS ships with these types, listed from top to bottom in the Component Type Stack:
+
+<Accordion title="Full list of built-in types">
+
+| Type | Description |
+|---|---|
+| `cell` | Handles `<td>` and `<th>` elements |
+| `row` | Handles `<tr>` elements |
+| `table` | Handles `<table>` elements |
+| `thead` | Handles `<thead>` elements |
+| `tbody` | Handles `<tbody>` elements |
+| `tfoot` | Handles `<tfoot>` elements |
+| `map` | Handles Google Maps embeds |
+| `link` | Handles `<a>` elements |
+| `label` | Handles `<label>` elements |
+| `video` | Handles `<video>` and YouTube/Vimeo iframes |
+| `image` | Handles `<img>` elements |
+| `script` | Handles `<script>` elements |
+| `svg` | Handles SVG elements |
+| `comment` | Handles HTML comment nodes |
+| `textnode` | Text nodes without a wrapping tag |
+| `text` | Inline-editable text elements |
+| `wrapper` | Root canvas wrapper element |
+| `default` | Fallback for anything else |
+
+</Accordion>
+
+---
+
+## Creating Custom Component Types
+
+Custom component types must be registered inside a **plugin**, which runs before any stored components are loaded. This ensures the type is available when templates are fetched from storage.
+
+```js
+const myInputPlugin = (editor) => {
+  editor.DomComponents.addType('my-input-type', {
+    // Runs during parsing to detect matching HTML elements
+    isComponent: (el) => el.tagName === 'INPUT',
+
+    model: {
+      defaults: {
+        tagName: 'input',
+        draggable: 'form, form *', // Only droppable inside form elements
+        droppable: false,
+        attributes: {
+          type: 'text',
+          name: 'default-name',
+          placeholder: 'Insert text here',
+        },
+        traits: ['name', 'placeholder', { type: 'checkbox', name: 'required' }],
+      },
+    },
+  });
+};
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  plugins: [myInputPlugin],
+});
+```
+
+### isComponent
+
+`isComponent(el)` receives the raw `HTMLElement` node (or text/comment node) and must return a truthy value if this type should handle it. It only executes when parsing is needed — adding a typed object `{ type: 'my-input-type' }` or using `data-gjs-type="my-input-type"` in HTML skips this check.
+
+```js
+isComponent: (el) => {
+  if (el.tagName === 'INPUT') {
+    // You can also return an enriched Component Definition
+    return { type: 'my-input-type', attributes: { title: 'Hi' } };
+  }
+},
+```
+
+<Warning>
+  Keep `isComponent` lean. It is called for *every* parsed node including text nodes and comment nodes — doing attribute lookups on a text node will throw. Always guard with `el.tagName` checks first.
+</Warning>
+
+### Model — defaults and inner components
+
+The `model.defaults` object mirrors the Component Definition schema. The `components` property accepts a string, a single object, an array, or a function that receives the model and returns any of the above:
+
+```js
+model: {
+  defaults: {
+    tagName: 'div',
+    attributes: { title: 'Hello' },
+    components: [
+      { tagName: 'h1', components: 'Header' },
+      '<p>Paragraph</p>',
+    ],
+    // Or as a function
+    components: (model) => `<h1>Type: ${model.get('type')}</h1>`,
+  },
+},
+```
+
+### View — custom canvas rendering
+
+Override `view` when you need extra DOM elements, canvas-only events, or async content that should not appear in exported HTML:
+
+```js
+editor.DomComponents.addType('my-input-type', {
+  model: { /* ... */ },
+  view: {
+    // DOM events scoped to this component (auto-removed on component remove)
+    events: {
+      click: 'onClickEl',
+      'dblclick .inner': 'onDblClickInner',
+    },
+
+    onClickEl() {
+      this.model.set('someProp', 'updated');
+    },
+
+    init({ model }) {
+      this.listenTo(model, 'change:someProp', this.onPropChange);
+    },
+
+    onRender({ el }) {
+      const btn = document.createElement('button');
+      btn.textContent = '+';
+      el.appendChild(btn);
+    },
+
+    removed() {
+      // Clean up any global event listeners here
+    },
+  },
+});
+```
+
+### Extending Existing Types
+
+```js
+// Extend model and view from another type
+editor.DomComponents.addType('my-new-component', {
+  isComponent: (el) => { /* ... */ },
+  extend: 'other-defined-component',  // inherits model
+  extendView: 'other-defined-component-2', // inherits view
+  model: { /* merged with parent */ },
+  view: { /* merged with parent */ },
+});
+
+// Reuse parent lifecycle methods
+editor.DomComponents.addType('child-type', {
+  extend: 'parent-type',
+  extendFn: ['init'], // call parent's init, then run yours
+  model: {
+    init() {
+      // Additional logic after parent's init
+    },
+  },
+});
+```
+
+---
+
+## Lifecycle Hooks
+
+Each component fires both **local** hooks (defined on the type) and **global** events (listened to via `editor.on`).
+
+```js
+editor.DomComponents.addType('test-component', {
+  model: {
+    defaults: { testprop: 1 },
+
+    init() {
+      // Local: fires when the model is initialized
+      this.listenTo(this, 'change:testprop', this.handlePropChange);
+    },
+
+    updated(property, value, prevValue) {
+      // Local: fires when any model property changes
+      console.log('updated', property, value, prevValue);
+    },
+
+    removed() {
+      // Local: fires when the component is removed from the canvas
+    },
+
+    handlePropChange() {
+      console.log('testprop is now', this.get('testprop'));
+    },
+  },
+
+  view: {
+    init() {
+      // Local: fires when the view is initialized
+    },
+    onRender() {
+      // Local: fires after the component is rendered in the canvas
+    },
+  },
+});
+
+// Global hooks
+editor.on('component:create', (model) => console.log('created', model.get('type')));
+editor.on('component:mount',  (model) => console.log('mounted', model.get('type')));
+editor.on('component:update:testprop', (model) => console.log('testprop updated', model));
+editor.on('component:remove', (model) => console.log('removed', model.get('type')));
+```
+
+The full lifecycle order is:
+
+1. `model.init()` → `component:create`
+2. `view.init()` → `view.onRender()` → `component:mount`
+3. `model.updated()` → `component:update` (on any property change)
+4. `model.removed()` → `component:remove`
+
+<Accordion title="Full list of component events">
+
+| Event | Trigger |
+|---|---|
+| `component:create` | Model initialized |
+| `component:mount` | View rendered in canvas |
+| `component:update` | Any model property changed |
+| `component:update:{prop}` | Specific property changed |
+| `component:styleUpdate` | Component styles updated |
+| `component:select` | Component selected |
+| `component:deselected` | Component deselected |
+| `component:toggled` | Selection toggled |
+| `component:hover` | Component hovered |
+| `component:remove` | Component removed |
+| `component:add` | Component added |
+| `component:clone` | Component cloned |
+| `component:drag:start` | Drag started |
+| `component:drag` | Dragging |
+| `component:drag:end` | Drag ended |
+| `component:resize:start` | Resize started |
+| `component:resize:move` | Resize in progress |
+| `component:resize:end` | Resize ended |
+| `component:render` | Component rendered (may fire multiple times) |
+| `component:input` | Input event on textable component |
+
+</Accordion>
+
+---
+
+## Component Traits
+
+Traits are the form fields that appear in the Traits panel when a component is selected. They let users edit component properties and attributes without touching code.
+
+```js
+editor.DomComponents.addType('my-input-type', {
+  model: {
+    defaults: {
+      traits: [
+        'name',         // shorthand: renders a text input for the 'name' attribute
+        'placeholder',  // shorthand: renders a text input for 'placeholder'
+        {
+          type: 'checkbox',
+          name: 'required',
+          label: 'Required',
+        },
+        {
+          type: 'select',
+          name: 'type',
+          label: 'Input type',
+          options: [
+            { id: 'text', label: 'Text' },
+            { id: 'email', label: 'Email' },
+            { id: 'number', label: 'Number' },
+          ],
+        },
+      ],
+    },
+  },
+});
+```
+
+---
+
+## Component-Scoped CSS
+
+Styles can be declared directly on the component definition using the `styles` property. The editor links these `CssRule` instances to the component type and removes them when all related component instances are deleted.
+
+```js
+editor.DomComponents.addType('card-component', {
+  model: {
+    defaults: {
+      attributes: { class: 'card' },
+      components: `
+        <div class="card__header">Title</div>
+        <div class="card__body">Body text</div>
+      `,
+      styles: `
+        .card { border: 1px solid #ddd; border-radius: 4px; padding: 16px; }
+        .card__header { font-weight: bold; margin-bottom: 8px; }
+        .card__body { color: #555; }
+
+        @media (max-width: 768px) {
+          .card { padding: 8px; }
+        }
+      `,
+    },
+  },
+});
+```
+
+<Warning>
+  For cleanest style scoping, declare `styles` on each individual component rather than a parent component that references children. This ensures each component's styles are removed correctly when that component type is deleted from the canvas.
+</Warning>
+
+---
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Blocks" href="/concepts/blocks">
+    Package components into reusable drag-and-drop blocks for your panel.
+  </Card>
+  <Card title="Style Manager" href="/concepts/styles">
+    Configure sectors and properties to let users style their components.
+  </Card>
+  <Card title="Canvas" href="/concepts/canvas">
+    Understand the iframe-based editing surface and canvas spots.
+  </Card>
+</CardGroup>

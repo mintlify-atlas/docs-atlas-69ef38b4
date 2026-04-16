@@ -1,0 +1,320 @@
+---
+title: "Asset Manager API Reference - GrapesJS UI Modules"
+description: "Complete API reference for editor.Assets in GrapesJS. Add, retrieve, and remove assets, open the asset picker modal, and wire up custom selection logic."
+---
+
+The Asset Manager (`editor.Assets`, also accessible as `editor.AssetManager`) keeps the library of media resources — images, videos, or any custom type — that users can pick from inside the editor. It ships with a built-in modal UI and an optional drag-and-drop file uploader, but every part of it can be replaced with a custom implementation. The API gives you full programmatic control over opening the picker, managing the asset collection, and wiring up your own selection logic.
+
+```ts
+// Obtain the module
+const am = editor.Assets;
+```
+
+<Note>
+  The Asset Manager maintains two collections internally: a **global** collection (all assets, accessed with `getAll()`) and a **visible** collection (only assets currently rendered, accessed with `getAllVisible()`). Calling `render()` syncs the visible set.
+</Note>
+
+---
+
+## Methods
+
+### `add(assets, opts?)`
+
+Add one or more assets to the global collection. Each URL is treated as unique.
+
+<ParamField path="assets" type="string | AssetProps | Asset | Array&lt;string | AssetProps | Asset&gt;" required>
+  A URL string, an asset properties object, an `Asset` instance, or an array of any of these.
+</ParamField>
+
+<ParamField path="opts" type="AddOptions">
+  Options forwarded to the underlying Backbone collection `add`.
+</ParamField>
+
+<ResponseField name="returns" type="Asset | Asset[]">
+  The added `Asset` instance or array of instances.
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+// Single URL
+am.add('https://example.com/images/hero.jpg');
+
+// Array of URLs
+am.add([
+  'https://example.com/images/hero.jpg',
+  'https://example.com/images/logo.png',
+]);
+
+// Object with extra metadata
+am.add({
+  src: 'https://example.com/images/hero.jpg',
+  name: 'Hero image',
+  type: 'image',
+  width: 1200,
+  height: 630,
+});
+```
+
+```js JavaScript
+am.add('https://example.com/images/hero.jpg');
+
+am.add([
+  { src: 'https://example.com/images/hero.jpg', name: 'Hero' },
+  { src: 'https://example.com/images/logo.png', name: 'Logo' },
+]);
+```
+</CodeGroup>
+
+---
+
+### `get(src)`
+
+Return the asset with the given source URL.
+
+<ParamField path="src" type="string" required>
+  The asset source URL used as the unique identifier.
+</ParamField>
+
+<ResponseField name="returns" type="Asset | null">
+  The matching `Asset` instance, or `null` if not found.
+</ResponseField>
+
+```ts
+const asset = am.get('https://example.com/images/hero.jpg');
+if (asset) {
+  console.log(asset.getType()); // 'image'
+}
+```
+
+---
+
+### `getAll()`
+
+Return the global asset collection containing every registered asset.
+
+<ResponseField name="returns" type="Collection&lt;Asset&gt;">
+  Backbone collection of all assets.
+</ResponseField>
+
+```ts
+const all = am.getAll();
+console.log(all.length);
+```
+
+---
+
+### `remove(asset, opts?)`
+
+Remove an asset from the collection.
+
+<ParamField path="asset" type="string | Asset" required>
+  The asset's source URL string or an `Asset` instance.
+</ParamField>
+
+<ParamField path="opts" type="RemoveOptions">
+  Options forwarded to the underlying collection remove.
+</ParamField>
+
+<ResponseField name="returns" type="Asset">
+  The removed `Asset` instance.
+</ResponseField>
+
+```ts
+// By URL
+am.remove('https://example.com/images/hero.jpg');
+
+// By instance
+const asset = am.get('https://example.com/images/logo.png');
+if (asset) am.remove(asset);
+```
+
+---
+
+### `open(opts?)`
+
+Open the Asset Manager modal. Triggers the internal `open-assets` command.
+
+<ParamField path="opts" type="AssetOpenOptions">
+  <Expandable title="options">
+    <ParamField path="opts.types" type="string[]">
+      Asset types to display. Defaults to `['image']`.
+    </ParamField>
+    <ParamField path="opts.select" type="(asset: Asset, complete: boolean) => void">
+      Callback invoked when the user selects an asset. `complete` is `false` on single click and `true` on double-click. Nothing happens on selection if this is omitted.
+    </ParamField>
+    <ParamField path="opts.accept" type="string">
+      File types accepted by the uploader input, e.g. `'image/*'`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```ts TypeScript
+am.open({
+  types: ['image'],
+  select(asset, complete) {
+    const selected = editor.getSelected();
+    if (selected?.is('image')) {
+      selected.addAttributes({ src: asset.getSrc() });
+      complete && am.close();
+    }
+  },
+});
+```
+
+```js JavaScript
+am.open({
+  types: ['image'],
+  select(asset, complete) {
+    const selected = editor.getSelected();
+    if (selected && selected.is('image')) {
+      selected.addAttributes({ src: asset.getSrc() });
+      complete && am.close();
+    }
+  },
+});
+```
+</CodeGroup>
+
+---
+
+### `close()`
+
+Close the Asset Manager modal. Runs the stop action of the `open-assets` command.
+
+```ts
+am.close();
+```
+
+---
+
+### `isOpen()`
+
+Check whether the Asset Manager is currently open.
+
+<ResponseField name="returns" type="boolean">
+  `true` if the Asset Manager is open, `false` otherwise.
+</ResponseField>
+
+```ts
+if (am.isOpen()) {
+  console.log('Asset Manager is visible');
+}
+```
+
+---
+
+### `getContainer()`
+
+Return the DOM element that contains the Asset Manager UI.
+
+<ResponseField name="returns" type="HTMLElement | undefined">
+  The container element, or `undefined` if the view has not been rendered yet.
+</ResponseField>
+
+```ts
+const container = am.getContainer();
+container?.insertAdjacentHTML('afterbegin', '<p>Custom header</p>');
+```
+
+---
+
+### `render(assets?)`
+
+Render assets into the visible collection. Call without arguments to show all assets.
+
+<ParamField path="assets" type="Asset[]">
+  An optional filtered subset of assets to display. Defaults to all assets.
+</ParamField>
+
+<ResponseField name="returns" type="HTMLElement | undefined">
+  The asset manager container element.
+</ResponseField>
+
+```ts
+// Show all
+am.render();
+
+// Show only assets from a particular category (custom property)
+am.render(
+  am.getAll().filter((a) => a.get('category') === 'brand')
+);
+```
+
+---
+
+## Asset Model Properties
+
+When creating assets with `add()`, the following fields are recognised.
+
+<ParamField path="src" type="string" required>
+  The asset URL. Acts as the unique identifier for the asset.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Asset type. Built-in value is `'image'`. Defaults to `''`, which is treated as `'image'`.
+</ParamField>
+
+<ParamField path="name" type="string">
+  Human-readable display name for the asset.
+</ParamField>
+
+<ParamField path="width" type="number">
+  Image width in pixels (for `image` type assets).
+</ParamField>
+
+<ParamField path="height" type="number">
+  Image height in pixels (for `image` type assets).
+</ParamField>
+
+---
+
+## Events
+
+| Event | Callback signature | Description |
+|---|---|---|
+| `asset:add` | `(asset: Asset)` | Fired when an asset is added. |
+| `asset:remove` | `(asset: Asset)` | Fired when an asset is removed. |
+| `asset:remove:before` | `(asset, remove, opts)` | Fired just before an asset is removed. |
+| `asset:update` | `(asset: Asset, changes)` | Fired when asset properties change. |
+| `asset:open` | `()` | Fired when the Asset Manager is opened. |
+| `asset:close` | `()` | Fired when the Asset Manager is closed. |
+| `asset:upload:start` | `()` | Fired when file upload begins. |
+| `asset:upload:end` | `(result)` | Fired when file upload finishes (success or failure). |
+| `asset:upload:error` | `(error: Error)` | Fired on upload error. |
+| `asset:upload:response` | `(response)` | Fired with the server response after a successful upload. |
+| `asset:custom` | `(AssetsCustomData)` | Fired when using a [custom Asset Manager UI](https://grapesjs.com/docs/modules/Assets.html#customization). |
+| `asset` | `({ event, model, ... })` | Catch-all for all asset events. |
+
+```ts
+editor.on('asset:add', (asset) => {
+  console.log('New asset:', asset.getSrc());
+});
+
+editor.on('asset:upload:error', (err) => {
+  console.error('Upload failed:', err.message);
+});
+```
+
+---
+
+## Configuration
+
+Pass `assetManager` options during `grapesjs.init()`:
+
+```ts
+const editor = grapesjs.init({
+  assetManager: {
+    assets: [
+      'https://example.com/images/placeholder.jpg',
+      { src: 'https://example.com/images/logo.svg', type: 'image', name: 'Logo' },
+    ],
+    upload: 'https://my-server.com/upload',
+    uploadName: 'files',
+  },
+});
+```
+
+<Tip>
+  To fully replace the default UI, set `assetManager.custom: true` and respond to the `asset:custom` event. For an externally hosted asset manager, use `assetManager.custom.open` and `assetManager.custom.close` callbacks instead.
+</Tip>

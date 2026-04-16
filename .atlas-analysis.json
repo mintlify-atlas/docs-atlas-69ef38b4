@@ -1,28 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "GrapesJS",
+  "projectType": "framework",
+  "projectName": "GrapesJS",
+  "projectDescription": "A free, open-source web builder framework for creating drag-and-drop template editors without coding.",
   "theme": "willow",
-  "colors": {
-    "primary": "#bc6492",
-    "light": "#dbaac4",
-    "dark": "#eed8e3"
-  },
-  "favicon": "https://media.brand.dev/cd85410f-d4e8-4c84-a99b-6c52b0efd9f3.png",
-  "logo": {
-    "light": "https://media.brand.dev/fb331fd2-694e-4850-973a-cb45787592d1.png",
-    "dark": "https://media.brand.dev/fb331fd2-694e-4850-973a-cb45787592d1.png"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/GrapesJS/grapesjs"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/GrapesJS/grapesjs"
-    }
-  },
+  "primaryColor": "#bc6492",
+  "lightColor": "#dbaac4",
+  "darkColor": "#eed8e3",
   "navigation": {
     "tabs": [
       {
@@ -115,5 +98,43 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Drag-and-drop visual editor with iframe canvas",
+    "Extensible plugin system for adding custom functionality",
+    "Component model with custom types and behaviors",
+    "Built-in Style Manager with CSS property sectors",
+    "Block Manager for reusable drag-and-drop content",
+    "Multi-page support with Page Manager",
+    "Asset Manager for media library management",
+    "Data Sources for dynamic data binding to components",
+    "Responsive design with Device Manager and media queries",
+    "Storage Manager with local and remote persistence",
+    "Internationalization (i18n) support",
+    "Undo/Redo history management",
+    "Rich Text Editor integration with customizable RTE"
+  ],
+  "publicApiSurface": [
+    "grapesjs.init(config: EditorConfig): Editor",
+    "grapesjs.usePlugin(plugin, opts): PluginFn",
+    "editor.addComponents(components, opts): Component[]",
+    "editor.getComponents(): Components",
+    "editor.getSelected(): Component | null",
+    "editor.getHtml(opts): string",
+    "editor.getCss(opts): string",
+    "editor.getJs(opts): string",
+    "editor.store(options): Promise<ProjectData>",
+    "editor.load(options): Promise<ProjectData>",
+    "editor.setDevice(name): Editor",
+    "editor.on(event, callback): Editor",
+    "editor.BlockManager.add(id, props): Block",
+    "editor.DomComponents.addType(type, methods): void",
+    "editor.StyleManager.addSector(id, sector): Sector",
+    "editor.AssetManager.add(assets): Asset[]",
+    "editor.Commands.add(id, command): void",
+    "editor.Panels.addPanel(panel): Panel",
+    "editor.DataSources.add(dataSource): DataSource",
+    "editor.Pages.add(page): Page",
+    "Plugin<C>(editor: Editor, opts: C): void"
+  ]
 }

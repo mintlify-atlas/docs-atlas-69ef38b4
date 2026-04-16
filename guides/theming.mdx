@@ -1,0 +1,204 @@
+---
+title: "Theming GrapesJS with CSS Classes and Variables"
+description: "Customize the GrapesJS editor color palette using four utility classes and CSS custom properties to match your application's visual identity."
+---
+
+GrapesJS uses an atomic theming system built around four semantic color roles. Instead of overriding dozens of individual CSS rules, you set those four colors once — either via utility classes or CSS custom properties — and the entire editor UI updates to match. This makes it straightforward to match the editor's appearance to your application's brand, whether you're going for a light theme, dark theme, or any custom palette.
+
+## Loading the GrapesJS stylesheet
+
+GrapesJS requires its CSS file to be loaded before any theme overrides. The styles define both the structural layout and the default color values.
+
+<Tabs>
+  <Tab title="CDN (HTML)">
+    ```html
+    <link rel="stylesheet" href="//unpkg.com/grapesjs/dist/css/grapes.min.css" />
+    <script src="//unpkg.com/grapesjs"></script>
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```js
+    import 'grapesjs/dist/css/grapes.min.css';
+    import grapesjs from 'grapesjs';
+    ```
+  </Tab>
+</Tabs>
+
+Your custom theme CSS must be placed **after** the GrapesJS stylesheet so your overrides take effect.
+
+## The four color roles
+
+The GrapesJS theming system maps four semantic color roles to utility classes and CSS custom properties. Understanding what each role controls helps you choose the right values for your palette.
+
+<CardGroup cols={2}>
+  <Card title=".gjs-one-bg" icon="square">
+    **Primary background.** The dominant background color used across panels, sidebars, and the main editor chrome. Sets the overall mood of the UI.
+  </Card>
+  <Card title=".gjs-two-color" icon="font">
+    **Secondary text color.** Used for labels, icons, and secondary content. Should contrast with the primary background.
+  </Card>
+  <Card title=".gjs-three-bg" icon="square">
+    **Tertiary background.** Used for active states, selected items, and highlighted panels. Typically a more prominent or saturated version of the primary background.
+  </Card>
+  <Card title=".gjs-four-color" icon="font">
+    **Quaternary text/accent color.** Used for interactive text elements and accents. Also applied on hover via `.gjs-four-color-h:hover`. Should stand out against both background colors.
+  </Card>
+</CardGroup>
+
+## Approach 1 — CSS utility classes
+
+Override the four utility classes in your stylesheet after importing GrapesJS. Each class sets a single property (`background-color` or `color`):
+
+```css
+/* Primary color for the background */
+.gjs-one-bg {
+  background-color: #78366a;
+}
+
+/* Secondary color for text */
+.gjs-two-color {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Tertiary color for backgrounds (active states, highlights) */
+.gjs-three-bg {
+  background-color: #ec5896;
+  color: white;
+}
+
+/* Quaternary color for text and hover states */
+.gjs-four-color,
+.gjs-four-color-h:hover {
+  color: #ec5896;
+}
+```
+
+## Approach 2 — CSS custom properties
+
+GrapesJS also exposes CSS custom properties on `:root`. Setting these achieves the same result as the utility class approach, and may be easier to manage alongside other design tokens in your project.
+
+```css
+:root {
+  --gjs-primary-color: #78366a;
+  --gjs-secondary-color: rgba(255, 255, 255, 0.7);
+  --gjs-tertiary-color: #ec5896;
+  --gjs-quaternary-color: #ec5896;
+}
+```
+
+The utility classes read from these custom properties, so setting the properties is equivalent to overriding the classes directly.
+
+### Default values
+
+The defaults defined in the GrapesJS SCSS source (`_gjs_vars.scss`) are:
+
+| Custom property | Default value | Role |
+|---|---|---|
+| `--gjs-primary-color` | `#444` | Primary background |
+| `--gjs-secondary-color` | `#ddd` | Secondary text |
+| `--gjs-tertiary-color` | `#804f7b` | Tertiary background |
+| `--gjs-quaternary-color` | `#d278c9` | Quaternary text / accent |
+
+The defaults form a dark gray + purple palette. Most custom themes will replace all four values.
+
+## Additional CSS custom properties
+
+Beyond the four theme colors, GrapesJS exposes many layout and style variables. A selection of the most commonly overridden:
+
+```css
+:root {
+  /* Typography */
+  --gjs-main-font: Helvetica, sans-serif;
+  --gjs-font-size: 0.75rem;
+
+  /* Canvas */
+  --gjs-canvas-top: 40px;
+
+  /* UI colors */
+  --gjs-color-blue: #3b97e3;
+  --gjs-color-red: #dd3636;
+  --gjs-color-yellow: #ffca6f;
+  --gjs-color-green: #62c462;
+
+  /* Highlight / selection */
+  --gjs-color-highlight: #71b7f1;
+}
+```
+
+## Practical theming examples
+
+<CodeGroup>
+
+```css Purple dark theme
+/* From the GrapesJS getting-started guide */
+.gjs-one-bg {
+  background-color: #78366a;
+}
+
+.gjs-two-color {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gjs-three-bg {
+  background-color: #ec5896;
+  color: white;
+}
+
+.gjs-four-color,
+.gjs-four-color-h:hover {
+  color: #ec5896;
+}
+```
+
+```css Equivalent using CSS variables
+:root {
+  --gjs-primary-color: #78366a;
+  --gjs-secondary-color: rgba(255, 255, 255, 0.7);
+  --gjs-tertiary-color: #ec5896;
+  --gjs-quaternary-color: #ec5896;
+}
+```
+
+```css Blue/slate light theme
+:root {
+  --gjs-primary-color: #2d3748;
+  --gjs-secondary-color: #e2e8f0;
+  --gjs-tertiary-color: #3182ce;
+  --gjs-quaternary-color: #63b3ed;
+}
+```
+
+```css Monochrome dark theme
+:root {
+  --gjs-primary-color: #1a1a1a;
+  --gjs-secondary-color: rgba(255, 255, 255, 0.75);
+  --gjs-tertiary-color: #333;
+  --gjs-quaternary-color: #fff;
+}
+```
+
+</CodeGroup>
+
+## Tips for matching your app's palette
+
+<Steps>
+  <Step title="Start with your brand's primary color">
+    Use your application's primary background or surface color for `--gjs-primary-color`. The editor panels will blend naturally into your app's chrome.
+  </Step>
+  <Step title="Ensure text contrast">
+    `--gjs-secondary-color` is used for labels and icons against the primary background. Check WCAG contrast ratios — aim for at least 4.5:1 for small text. Semi-transparent whites like `rgba(255,255,255,0.7)` work well on dark backgrounds.
+  </Step>
+  <Step title="Use an accent for tertiary and quaternary">
+    Both `--gjs-tertiary-color` and `--gjs-quaternary-color` are used for active states, highlights, and interactive text. Using the same accent color for both (as in the purple example above) is common and keeps the palette cohesive.
+  </Step>
+  <Step title="Override after the GrapesJS stylesheet">
+    Always ensure your theme CSS loads after `grapes.min.css`. In a bundler context, import your theme stylesheet after the GrapesJS CSS import in your entry file.
+  </Step>
+  <Step title="Use browser DevTools to verify">
+    Open the editor and use your browser's element inspector to see which GrapesJS classes are applied to specific UI elements. This helps diagnose cases where your theme override is not taking effect.
+  </Step>
+</Steps>
+
+<Tip>
+  CSS custom properties can be dynamically changed at runtime via JavaScript: `document.documentElement.style.setProperty('--gjs-primary-color', '#newcolor')`. This makes it straightforward to implement a live theme switcher.
+</Tip>

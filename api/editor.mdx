@@ -1,0 +1,765 @@
+---
+title: "GrapesJS Editor API Reference & Methods"
+description: "Reference for the GrapesJS Editor class from grapesjs.init(). Covers module accessors, content methods (getHtml, getCss), selection, storage, and events."
+---
+
+The `Editor` class is the central object of every GrapesJS application. It is returned by `grapesjs.init()` and provides access to every sub-module, exposes methods for reading and writing canvas content, manages selection state, and implements a typed event bus. Everything from loading project data to running built-in commands passes through this object.
+
+```typescript
+import grapesjs from 'grapesjs';
+
+const editor = grapesjs.init({
+  container: '#gjs',
+  height: '100%',
+  width: 'auto',
+});
+```
+
+## Module accessors
+
+The editor exposes each sub-module as a getter. Both canonical names (e.g. `StyleManager`) and short aliases (e.g. `Styles`) are available and point to the same instance.
+
+| Accessor | Alias | Type |
+|---|---|---|
+| `editor.Config` | — | `EditorConfig` |
+| `editor.I18n` | — | `I18nModule` |
+| `editor.Utils` | — | `UtilsModule` |
+| `editor.Commands` | — | `CommandsModule` |
+| `editor.Keymaps` | — | `KeymapsModule` |
+| `editor.Modal` | — | `ModalModule` |
+| `editor.Panels` | — | `PanelManager` |
+| `editor.Canvas` | — | `CanvasModule` |
+| `editor.Parser` | — | `ParserModule` |
+| `editor.CodeManager` | — | `CodeManagerModule` |
+| `editor.UndoManager` | — | `UndoManagerModule` |
+| `editor.RichTextEditor` | — | `RichTextEditorModule` |
+| `editor.Pages` | — | `PageManager` |
+| `editor.Components` | `DomComponents` | `ComponentManager` |
+| `editor.Layers` | `LayerManager` | `LayerManager` |
+| `editor.Css` | `CssComposer` | `CssComposer` |
+| `editor.Storage` | `StorageManager` | `StorageManager` |
+| `editor.Assets` | `AssetManager` | `AssetManager` |
+| `editor.Blocks` | `BlockManager` | `BlockManager` |
+| `editor.Traits` | `TraitManager` | `TraitManager` |
+| `editor.Selectors` | `SelectorManager` | `SelectorManager` |
+| `editor.Styles` | `StyleManager` | `StyleManager` |
+| `editor.Devices` | `DeviceManager` | `DeviceManager` |
+| `editor.DataSources` | — | `DataSourceManager` |
+
+---
+
+## Methods
+
+### getConfig
+
+Returns the editor configuration object, or the value of a single key when `prop` is provided.
+
+```typescript
+getConfig<P extends EditorConfigKeys | undefined = undefined>(prop?: P): EditorConfig | EditorConfig[P]
+```
+
+---
+
+### getHtml
+
+Returns the HTML built inside the canvas.
+
+```typescript
+getHtml(opts?: {
+  component?: Component;
+  cleanId?: boolean;
+}): string
+```
+
+<ParamField path="opts.component" type="Component">
+  Return the HTML of a specific component only. Omit to get the full canvas HTML.
+</ParamField>
+
+<ParamField path="opts.cleanId" type="boolean" default="false">
+  Remove auto-generated IDs that are not semantically meaningful.
+</ParamField>
+
+<CodeGroup>
+
+```typescript TypeScript
+const html = editor.getHtml();
+
+// Scoped to one component
+const html = editor.getHtml({ component: myComp, cleanId: true });
+```
+
+```javascript JavaScript
+const html = editor.getHtml();
+```
+
+</CodeGroup>
+
+---
+
+### getCss
+
+Returns CSS built inside the canvas.
+
+```typescript
+getCss(opts?: {
+  component?: Component;
+  json?: boolean;
+  avoidProtected?: boolean;
+  onlyMatched?: boolean;
+  keepUnusedStyles?: boolean;
+  allowEmpty?: boolean;
+}): string | CssRule[]
+```
+
+<ParamField path="opts.component" type="Component">
+  Return only the CSS that belongs to a specific component.
+</ParamField>
+
+<ParamField path="opts.json" type="boolean" default="false">
+  Return an array of `CssRule` objects instead of a CSS string.
+</ParamField>
+
+<ParamField path="opts.avoidProtected" type="boolean" default="false">
+  Exclude rules marked as protected.
+</ParamField>
+
+<ParamField path="opts.onlyMatched" type="boolean" default="false">
+  Return only rules matched by the passed component.
+</ParamField>
+
+<ParamField path="opts.keepUnusedStyles" type="boolean" default="false">
+  Force-include all defined rules, even unused ones. Useful when canvas output differs from external output.
+</ParamField>
+
+<ParamField path="opts.allowEmpty" type="boolean" default="false">
+  Include rules with empty style declarations.
+</ParamField>
+
+---
+
+### getJs
+
+Returns the JavaScript of all components (or a specific one).
+
+```typescript
+getJs(opts?: { component?: Component }): string
+```
+
+<ParamField path="opts.component" type="Component">
+  Limit the output to a specific component's script.
+</ParamField>
+
+---
+
+### getComponents
+
+Return the complete tree of components, excluding the wrapper.
+
+```typescript
+getComponents(): Components
+```
+
+<Tip>Use `getWrapper()` when you need to include the root wrapper component itself.</Tip>
+
+---
+
+### getWrapper
+
+Return the wrapper component and all of its children.
+
+```typescript
+getWrapper(): ComponentWrapper | undefined
+```
+
+---
+
+### setComponents
+
+Replace all components in the canvas. This **overrides** existing content.
+
+```typescript
+setComponents(components: ComponentAdd, opt?: AddComponentsOption): this
+```
+
+<ParamField path="components" type="string | object | object[]" required>
+  An HTML string, a component definition object, or an array of component definitions.
+</ParamField>
+
+```javascript
+editor.setComponents('<div class="cls">New component</div>');
+
+editor.setComponents({
+  type: 'text',
+  classes: ['cls'],
+  content: 'New component',
+});
+```
+
+<Warning>This method replaces all existing canvas content. To append without replacing, use `addComponents()`.</Warning>
+
+---
+
+### addComponents
+
+Append one or more components to the canvas without overriding existing content.
+
+```typescript
+addComponents(components: ComponentAdd, opts?: AddOptions): Component[]
+```
+
+<ParamField path="components" type="string | object | object[]" required>
+  An HTML string, a component definition object, or an array of component definitions.
+</ParamField>
+
+<ParamField path="opts.avoidUpdateStyle" type="boolean" default="false">
+  When the HTML string contains styles, set this to `true` to skip updating already-existing rules.
+</ParamField>
+
+```javascript
+editor.addComponents('<div class="cls">New component</div>');
+```
+
+---
+
+### getStyle
+
+Returns all CSS rules in the canvas as a JSON object.
+
+```typescript
+getStyle(): CssRules
+```
+
+---
+
+### setStyle
+
+Replace all styles in the canvas. This **overrides** existing styles.
+
+```typescript
+setStyle(style: string | object | object[], opt?: object): this
+```
+
+```javascript
+editor.setStyle('.cls { color: red }');
+// or
+editor.setStyle({ selectors: ['cls'], style: { color: 'red' } });
+```
+
+---
+
+### addStyle
+
+Add styles to the editor without overriding existing rules.
+
+```typescript
+addStyle(style: string | object | object[], opts?: object): CssRule[]
+```
+
+```javascript
+editor.addStyle('.cls { color: red }');
+```
+
+---
+
+### getSelected
+
+Returns the last selected component, or `undefined` if nothing is selected.
+
+```typescript
+getSelected(): Component | undefined
+```
+
+---
+
+### getSelectedAll
+
+Returns an array of all currently selected components.
+
+```typescript
+getSelectedAll(): Component[]
+```
+
+---
+
+### select
+
+Select a component in the canvas.
+
+```typescript
+select(el?: Component | HTMLElement, opts?: SelectComponentOptions): this
+```
+
+<ParamField path="el" type="Component | HTMLElement">
+  The component instance or DOM element to select.
+</ParamField>
+
+<ParamField path="opts.scroll" type="boolean">
+  Scroll the canvas viewport to the selected element.
+</ParamField>
+
+```javascript
+editor.on('block:drag:stop', (model) => {
+  editor.select(model);
+});
+```
+
+---
+
+### selectAdd
+
+Add a component to the current selection without deselecting others.
+
+```typescript
+selectAdd(el: Component | HTMLElement | Component[]): this
+```
+
+---
+
+### selectRemove
+
+Remove a component from the current selection.
+
+```typescript
+selectRemove(el: Component | HTMLElement | Component[]): this
+```
+
+---
+
+### selectToggle
+
+Toggle a component's selected state.
+
+```typescript
+selectToggle(el: Component | HTMLElement | Component[]): this
+```
+
+---
+
+### getEditing
+
+Returns the component currently in rich text editing mode, or `null` if none.
+
+```typescript
+getEditing(): Component | null
+```
+
+```javascript
+const textComp = editor.getEditing();
+if (textComp) {
+  console.log('HTML:', textComp.toHTML());
+}
+```
+
+---
+
+### setDevice
+
+Change the active device, which adjusts the canvas width accordingly.
+
+```typescript
+setDevice(name: string): this
+```
+
+<ParamField path="name" type="string" required>
+  The device name as registered in the Device Manager (e.g. `'Tablet'`, `'Mobile portrait'`).
+</ParamField>
+
+```javascript
+editor.setDevice('Tablet');
+```
+
+---
+
+### getDevice
+
+Return the name of the currently active device.
+
+```typescript
+getDevice(): string
+```
+
+---
+
+### runCommand
+
+Execute a registered command by ID.
+
+```typescript
+runCommand(id: string, options?: Record<string, unknown>): any
+```
+
+<ParamField path="id" type="string" required>
+  The command ID (e.g. `'core:undo'`).
+</ParamField>
+
+<ParamField path="options" type="object" default="{}">
+  Custom options forwarded to the command's `run` method.
+</ParamField>
+
+```javascript
+editor.runCommand('core:preview');
+editor.runCommand('myCommand', { someValue: 1 });
+```
+
+---
+
+### stopCommand
+
+Stop a running command (calls its `stop` method if one is defined).
+
+```typescript
+stopCommand(id: string, options?: Record<string, unknown>): any
+```
+
+```javascript
+editor.stopCommand('core:preview');
+```
+
+---
+
+### store
+
+Persist the project to the configured storage. Resets `getDirtyCount()` to zero.
+
+```typescript
+store<T extends StorageOptions>(options?: T): Promise<ProjectData>
+```
+
+```javascript
+const saved = await editor.store();
+```
+
+---
+
+### load
+
+Load project data from the configured storage.
+
+```typescript
+load<T extends StorageOptions>(
+  options?: T,
+  loadOptions?: { clear?: boolean }
+): Promise<ProjectData>
+```
+
+<ParamField path="loadOptions.clear" type="boolean" default="false">
+  Reset the editor state — including the dirty counter and undo history — after loading.
+</ParamField>
+
+```javascript
+const data = await editor.load();
+
+// Load and clear history
+await editor.load({}, { clear: true });
+```
+
+---
+
+### getProjectData
+
+Serialize the current project to a plain JSON object that can be stored and later restored with `loadProjectData`.
+
+```typescript
+getProjectData(): ProjectData
+```
+
+```javascript
+const json = editor.getProjectData();
+// { pages: [...], styles: [...], ... }
+localStorage.setItem('my-project', JSON.stringify(json));
+```
+
+---
+
+### loadProjectData
+
+Load a project from a plain JSON object previously obtained via `getProjectData`.
+
+```typescript
+loadProjectData(data: ProjectData, options?: EditorLoadOptions & Record<string, unknown>): void
+```
+
+<ParamField path="data" type="ProjectData" required>
+  The project JSON — must contain at minimum a `pages` array.
+</ParamField>
+
+<ParamField path="options" type="object">
+  Custom options forwarded to `project:load` and `project:loaded` event payloads.
+</ParamField>
+
+```javascript
+const json = JSON.parse(localStorage.getItem('my-project'));
+editor.loadProjectData(json);
+```
+
+---
+
+### getContainer
+
+Return the HTML element that hosts the editor, as defined by the `container` init option.
+
+```typescript
+getContainer(): HTMLElement | undefined
+```
+
+---
+
+### getDirtyCount
+
+Return the number of unsaved changes since the last `store()` call.
+
+```typescript
+getDirtyCount(): number
+```
+
+```javascript
+window.addEventListener('beforeunload', (e) => {
+  if (editor.getDirtyCount() > 0) {
+    e.preventDefault();
+  }
+});
+```
+
+---
+
+### clearDirtyCount
+
+Reset the unsaved-changes counter to zero without persisting.
+
+```typescript
+clearDirtyCount(): void
+```
+
+---
+
+### refresh
+
+Recalculate editor dimension offsets. Call this after programmatically repositioning the editor container with CSS to keep tools (toolbar, highlights) aligned.
+
+```typescript
+refresh(opts?: { tools?: boolean }): void
+```
+
+<ParamField path="opts.tools" type="boolean" default="false">
+  Also refresh floating tool positions (e.g. rich text editor, component highlighter).
+</ParamField>
+
+---
+
+### setCustomRte
+
+Replace the built-in Rich Text Editor with a custom implementation.
+
+```typescript
+setCustomRte<T>(obj: CustomRTE & ThisType<T & CustomRTE>): void
+```
+
+The `obj` must implement `enable(el, rte)` at minimum; `disable(el, rte)` and `focus(el, rte)` are also supported.
+
+```javascript
+editor.setCustomRte({
+  enable(el, rte) {
+    rte = new MyRTE(el, {});
+    return rte;
+  },
+  disable(el, rte) {
+    rte.blur();
+  },
+  focus(el, rte) {
+    rte.focus();
+  },
+});
+```
+
+---
+
+### setCustomParserCss
+
+Replace the default CSS parser with a custom function. Pass `null` to remove a previously set custom parser.
+
+```typescript
+setCustomParserCss(parser: CustomParserCss | null): this
+```
+
+The parser receives a CSS string and must return an array of rule objects with `selectors` and `style` fields.
+
+```javascript
+editor.setCustomParserCss((css) => {
+  const result = [];
+  // parse css...
+  result.push({
+    selectors: '.someclass, div .otherclass',
+    style: { color: 'red' },
+  });
+  return result;
+});
+```
+
+---
+
+### setDragMode
+
+Set the global drag mode for components.
+
+```typescript
+setDragMode(value: 'absolute' | 'translate'): this
+```
+
+<ParamField path="value" type="'absolute' | 'translate'" required>
+  `'absolute'` — move components with absolute positioning (design-tool style). `'translate'` — move components using CSS `transform: translate`.
+</ParamField>
+
+---
+
+### log
+
+Emit a structured log event through the editor's event bus.
+
+```typescript
+log(msg: string, opts?: { ns?: string; level?: string }): this
+```
+
+<ParamField path="msg" type="string" required>
+  The message to log.
+</ParamField>
+
+<ParamField path="opts.ns" type="string" default="''">
+  Namespace (e.g. a plugin name). Generates additional scoped events such as `log-my-plugin` and `log-my-plugin:info`.
+</ParamField>
+
+<ParamField path="opts.level" type="string" default="'debug'">
+  Severity level: `'debug'`, `'info'`, `'warning'`, or `'error'`.
+</ParamField>
+
+```javascript
+editor.log('Component loaded', { ns: 'my-plugin', level: 'info' });
+// Triggers: 'log', 'log:info', 'log-my-plugin', 'log-my-plugin:info'
+```
+
+---
+
+### on
+
+Attach an event listener.
+
+```typescript
+on<E extends EditorEvent>(event: E, callback: EditorEventHandler<E>): this
+```
+
+```javascript
+editor.on('update', () => console.log('project changed'));
+editor.on('component:add', (component) => console.log(component.getId()));
+```
+
+---
+
+### once
+
+Attach a one-time event listener that removes itself after the first invocation.
+
+```typescript
+once<E extends EditorEvent>(event: E, callback: EditorEventHandler<E>): this
+```
+
+---
+
+### off
+
+Remove an event listener.
+
+```typescript
+off<E extends EditorEvent>(event: E, callback: EditorEventHandler<E>): this
+```
+
+---
+
+### trigger
+
+Manually trigger an event on the editor's event bus.
+
+```typescript
+trigger<E extends EditorEvent>(event: E, ...args: any[]): this
+```
+
+---
+
+### render
+
+Render the editor into the configured container and return the root element.
+
+```typescript
+render(): HTMLElement
+```
+
+<Note>When `autorender` is `true` (the default), `render()` is called automatically during `init()`. Call it manually only if you set `autorender: false`.</Note>
+
+---
+
+### destroy
+
+Tear down the editor instance, removing all event listeners and DOM elements.
+
+```typescript
+destroy(): void
+```
+
+---
+
+### onReady
+
+Register a callback that runs once the editor is fully loaded and rendered. If the editor is already ready when this is called, the callback fires immediately.
+
+```typescript
+onReady(clb: EventHandler): void
+```
+
+```javascript
+editor.onReady(() => {
+  editor.runCommand('core:preview');
+});
+```
+
+---
+
+## Events
+
+All events are emitted on the editor instance. Listen with `editor.on(eventName, callback)`.
+
+### Core editor events
+
+| Event | Payload | Description |
+|---|---|---|
+| `update` | — | Triggered on any project change (component added/removed, style change, etc.) |
+| `undo` | — | Undo executed |
+| `redo` | — | Redo executed |
+| `load` | `editor` | Editor fully loaded and canvas rendered |
+| `project:load` | `{ project, options, initial }` | Project JSON loaded (initial load or via `loadProjectData`) |
+| `project:loaded` | `{ project, options, initial }` | Same as `project:load`, but only fires when the project is non-empty |
+| `project:get` | `{ project }` | Fired when project data is requested — use to inject custom keys |
+| `log` | `msg, opts` | Log message triggered |
+| `telemetry:init` | — | Initial telemetry payload sent |
+| `destroy` | — | Editor started tearing down |
+| `destroyed` | — | Editor fully destroyed |
+| `canvasScroll` | — | Canvas element scrolled |
+
+### Log sub-events
+
+When `editor.log()` is called with a namespace and/or level, additional events fire:
+
+```javascript
+// editor.log('msg', { ns: 'plugin-x', level: 'info' })
+editor.on('log', (msg, opts) => { ... });
+editor.on('log:info', (msg, opts) => { ... });
+editor.on('log-plugin-x', (msg, opts) => { ... });
+editor.on('log-plugin-x:info', (msg, opts) => { ... });
+```
+
+### Module events
+
+Each module emits its own scoped events. See the individual module pages for complete event references:
+
+- [Commands events](/api/commands) — `command:run`, `command:stop`, `command:abort:ID`, etc.
+- [Keymaps events](/api/keymaps) — `keymap:add`, `keymap:remove`, `keymap:emit`
+- Component events — `component:add`, `component:remove`, `component:update`, etc.
+- Storage events — `storage:start`, `storage:end`, `storage:error`, etc.
+- Style Manager events — `styleManager:update`, etc.

@@ -1,0 +1,219 @@
+---
+title: "Reuse Components with Symbols in GrapesJS"
+description: "Create shared, linked component instances that stay in sync across your project, then detach individual instances when you need independent variations."
+---
+
+Symbols are a special kind of GrapesJS component that lets you define a piece of UI once and reuse it in multiple places — with changes to any one instance automatically reflected everywhere. They solve the common problem of keeping repeated elements (navigation bars, cards, footers, call-to-action blocks) consistent without manually editing each occurrence. A Symbol maintains a reference between a Main Symbol and all of its Instance Symbols, so any property update propagates across the entire set. When you need an instance to diverge, you can detach it to make it independent.
+
+<Warning>
+  Symbols are released as a beta feature from GrapesJS v0.21.11. It is recommended to read the [Components module documentation](/concepts/components) before working with Symbols.
+</Warning>
+
+<Note>
+  Symbols operate at the API level only — there is no built-in UI for managing them. You are expected to build your own panel or toolbar to expose Symbol functionality to end users.
+</Note>
+
+## How Symbols work
+
+When you call `addSymbol()` on a component, GrapesJS creates a **Main Symbol** and converts the original component into an **Instance Symbol**. The Main Symbol is stored separately in your project's JSON and is automatically reconnected when the project reloads. Every subsequent call to `addSymbol()` with either the main or any instance produces a new Instance Symbol linked to the same Main.
+
+Property changes made to any Symbol propagate to all related Symbols automatically. You can suppress propagation for specific properties on a per-component basis using overrides.
+
+```
+Main Symbol
+├── Instance 1  (original component, converted on addSymbol())
+├── Instance 2  (added later)
+└── Instance 3  (added later)
+```
+
+## Creating a symbol
+
+Call `editor.Components.addSymbol()` with any component. It returns the Main Symbol; the component you passed becomes Instance 1.
+
+```js
+const anyComponent = editor.getSelected();
+const symbolMain = editor.Components.addSymbol(anyComponent);
+```
+
+To create additional instances, pass either the Main Symbol or any existing instance to `addSymbol()` again:
+
+```js
+const secondInstance = editor.Components.addSymbol(symbolMain);
+```
+
+After this, `symbolMain` references two instances: `anyComponent` and `secondInstance`.
+
+To list all Main Symbols currently in the project:
+
+```js
+const symbols = editor.Components.getSymbols();
+const symbolMain = symbols[0];
+```
+
+## Inspecting symbol details
+
+`getSymbolInfo()` returns metadata about any component's relationship to its Symbol:
+
+```js
+// Details from the Main Symbol
+const symbolMainInfo = editor.Components.getSymbolInfo(symbolMain);
+
+symbolMainInfo.isSymbol;   // true  — it's a Symbol
+symbolMainInfo.isRoot;     // true  — it's the root of the Symbol
+symbolMainInfo.isMain;     // true  — it's the Main Symbol
+symbolMainInfo.isInstance; // false — not an Instance Symbol
+symbolMainInfo.main;       // reference to the Main Symbol
+symbolMainInfo.instances;  // [anyComponent, secondInstance]
+symbolMainInfo.relatives;  // [anyComponent, secondInstance]
+
+// Details from an Instance Symbol
+const secondInstanceInfo = editor.Components.getSymbolInfo(secondInstance);
+
+secondInstanceInfo.isSymbol;   // true  — it's a Symbol
+secondInstanceInfo.isRoot;     // true  — it's the root of the Symbol
+secondInstanceInfo.isMain;     // false — not the Main Symbol
+secondInstanceInfo.isInstance; // true  — it's an Instance Symbol
+secondInstanceInfo.main;       // reference to the Main Symbol
+secondInstanceInfo.instances;  // [anyComponent, secondInstance]
+secondInstanceInfo.relatives;  // [anyComponent, symbolMain]
+```
+
+## Syncing changes
+
+Property changes on any Symbol component propagate to all related Symbols automatically:
+
+```js
+anyComponent.set('my-property', true);
+secondInstance.get('my-property'); // true — change propagated
+```
+
+### Suppressing propagation with overrides
+
+If you need a specific property to remain independent on a given component, use `setSymbolOverride()`:
+
+```js
+anyComponent.setSymbolOverride(['my-property']);
+// Read the current override list:
+anyComponent.getSymbolOverride(); // ['my-property']
+
+anyComponent.set('my-property', false);
+secondInstance.get('my-property'); // still true — change did NOT propagate
+```
+
+Override is set at the component level, not the Symbol level, so different instances can have different override lists.
+
+## Detaching an instance
+
+To disconnect an instance from its Symbol — making it a standalone, independent component — use `detachSymbol()`:
+
+```js
+editor.Components.detachSymbol(anyComponent);
+
+const info = editor.Components.getSymbolInfo(anyComponent);
+info.isSymbol; // false — no longer a Symbol
+
+const infoMain = editor.Components.getSymbolInfo(symbolMain);
+infoMain.instances; // [secondInstance] — anyComponent removed
+```
+
+After detaching, changes to the remaining instances no longer affect the detached component, and vice versa.
+
+## Removing a symbol
+
+To remove a Main Symbol entirely and detach all of its instances:
+
+```js
+const symbolMain = editor.Components.getSymbols()[0];
+symbolMain.remove();
+```
+
+## Symbol events
+
+GrapesJS emits granular events as Symbols are created, updated, and removed. Use them to keep your custom UI in sync.
+
+<CodeGroup>
+
+```js Main symbol events
+// A new Main Symbol was created
+editor.on('symbol:main:add', ({ component }) => { /* ... */ });
+
+// A Main Symbol was updated
+editor.on('symbol:main:update', ({ component }) => { /* ... */ });
+
+// A Main Symbol was removed
+editor.on('symbol:main:remove', ({ component }) => { /* ... */ });
+
+// Catch-all for any Main Symbol event
+editor.on('symbol:main', ({ event, component }) => { /* ... */ });
+```
+
+```js Instance symbol events
+// A new Instance Symbol was added
+editor.on('symbol:instance:add', ({ component }) => { /* ... */ });
+
+// An Instance Symbol was removed
+editor.on('symbol:instance:remove', ({ component }) => { /* ... */ });
+
+// Catch-all for any Instance Symbol event
+editor.on('symbol:instance', ({ event, component }) => { /* ... */ });
+```
+
+```js Global symbol event
+// Catch-all for any symbol update (main or instance)
+editor.on('symbol', () => { /* ... */ });
+```
+
+</CodeGroup>
+
+The global `symbol` event is useful for refreshing a symbols panel whenever anything changes, without subscribing to each individual event.
+
+## Building a symbols UI
+
+Because GrapesJS provides no built-in UI for Symbols, you need to implement your own. The following is a minimal reference implementation that demonstrates the core workflow:
+
+```js
+const editor = grapesjs.init({
+  container: '#gjs',
+  storageManager: false,
+  components: `<div>
+    <article class="card" style="max-width: 300px; padding: 20px">
+      <img src="https://placehold.co/600x400/000000/FFF" style="max-width: 100%"/>
+      <h1>Title</h1>
+      <p>Lorem ipsum dolor sit amet...</p>
+    </article>
+  </div>`,
+});
+
+const { Components } = editor;
+
+// Listen for any symbol change to refresh the UI
+editor.on('symbol', updateSymbolsList);
+
+function updateSymbolsList() {
+  const symbols = Components.getSymbols();
+  // Re-render your symbols panel with the updated list
+}
+
+function createSymbol() {
+  const selected = editor.getSelected();
+  if (!selected) return;
+
+  const info = Components.getSymbolInfo(selected);
+  if (info.isSymbol) return; // already a symbol
+
+  Components.addSymbol(selected);
+}
+
+function createInstance(symbolMain) {
+  const instance = Components.addSymbol(symbolMain);
+  editor.getWrapper().append(instance, { at: 0 });
+}
+
+function getInstanceCount(symbolMain) {
+  return Components.getSymbolInfo(symbolMain).instances.length;
+}
+```
+
+<Tip>
+  Use the `symbol` catch-all event to drive your UI updates. It fires after any symbol operation, so a single listener is enough to keep a symbol list or panel current.
+</Tip>

@@ -1,0 +1,323 @@
+---
+title: "Modal Dialog API Reference - GrapesJS UI Modules"
+description: "Complete API reference for editor.Modal in GrapesJS. Open and close the dialog, set title and content, and listen to modal open/close events."
+---
+
+The Modal module (`editor.Modal`) provides a lightweight dialog window built into the GrapesJS editor shell. Any part of the editor — or your own plugin code — can open the modal with arbitrary title and content, listen for open/close events, or replace the entire modal implementation with a custom one. It is used internally by GrapesJS for the Asset Manager picker and other built-in dialogs.
+
+```ts
+// Obtain the module
+const modal = editor.Modal;
+```
+
+---
+
+## Methods
+
+### `open(opts?)`
+
+Open the modal window. Optionally set the title, content, and custom wrapper attributes in a single call.
+
+<ParamField path="opts" type="object">
+  <Expandable title="options">
+    <ParamField path="opts.title" type="string | HTMLElement">
+      Title to display in the modal header. Passed directly to `setTitle()`.
+    </ParamField>
+    <ParamField path="opts.content" type="string | HTMLElement">
+      Content to display in the modal body. Passed directly to `setContent()`.
+    </ParamField>
+    <ParamField path="opts.attributes" type="Record&lt;string, any&gt;">
+      Custom HTML attributes applied to the modal wrapper element (e.g. `{ class: 'my-modal' }`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+modal.open({
+  title: 'Export Code',
+  content: '<pre><code><!-- your HTML here --></code></pre>',
+  attributes: { class: 'export-modal' },
+});
+```
+
+```js JavaScript
+modal.open({
+  title: 'Export Code',
+  content: document.getElementById('export-template').cloneNode(true),
+});
+```
+</CodeGroup>
+
+---
+
+### `close()`
+
+Close the modal window.
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+```ts
+modal.close();
+```
+
+---
+
+### `isOpen()`
+
+Check whether the modal is currently open.
+
+<ResponseField name="returns" type="boolean">
+  `true` if the modal is visible.
+</ResponseField>
+
+```ts
+if (!modal.isOpen()) {
+  modal.open({ title: 'Welcome', content: 'Hello!' });
+}
+```
+
+---
+
+### `setTitle(title)`
+
+Set the title displayed in the modal header.
+
+<ParamField path="title" type="string | HTMLElement" required>
+  The new title — either a plain string or an `HTMLElement`.
+</ParamField>
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+```ts
+modal.setTitle('Updated Title');
+
+// With an HTMLElement
+const titleEl = document.createElement('span');
+titleEl.innerHTML = '<strong>Rich</strong> Title';
+modal.setTitle(titleEl as unknown as string);
+```
+
+---
+
+### `getTitle()`
+
+Get the current modal title.
+
+<ResponseField name="returns" type="string | HTMLElement">
+  The current title value.
+</ResponseField>
+
+```ts
+const title = modal.getTitle();
+```
+
+---
+
+### `setContent(content)`
+
+Set the body content of the modal.
+
+<ParamField path="content" type="string | HTMLElement" required>
+  Content as a plain string or an `HTMLElement`. Setting the same string twice requires an intermediate value change (the module resets internally).
+</ParamField>
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+```ts
+modal.setContent('<p>Updated content</p>');
+
+// With an HTMLElement
+const form = document.createElement('form');
+form.innerHTML = '<input type="text" name="q" placeholder="Search...">';
+modal.setContent(form);
+```
+
+---
+
+### `getContent()`
+
+Get the current modal body content.
+
+<ResponseField name="returns" type="string | HTMLElement">
+  The current content value.
+</ResponseField>
+
+```ts
+const content = modal.getContent();
+```
+
+---
+
+### `onceClose(callback)`
+
+Register a one-time callback that fires the next time the modal is closed.
+
+<ParamField path="callback" type="() => void" required>
+  Function to invoke on the next `modal:close` event.
+</ParamField>
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+```ts
+modal.onceClose(() => {
+  console.log('Modal was closed');
+});
+modal.open({ title: 'Hi', content: 'There' });
+```
+
+---
+
+### `onceOpen(callback)`
+
+Register a one-time callback that fires the next time the modal is opened.
+
+<ParamField path="callback" type="() => void" required>
+  Function to invoke on the next `modal:open` event.
+</ParamField>
+
+<ResponseField name="returns" type="this">
+  The `ModalModule` instance for method chaining.
+</ResponseField>
+
+```ts
+modal.onceOpen(() => {
+  console.log('Modal just opened');
+});
+```
+
+---
+
+## Events
+
+| Event | Callback signature | Description |
+|---|---|---|
+| `modal:open` | `()` | Fired when the modal is opened. |
+| `modal:close` | `()` | Fired when the modal is closed. |
+| `modal` | `(ModalEventData)` | Catch-all event fired on any modal state change (open, title, or content update). |
+
+The catch-all `modal` event receives an object with the following shape:
+
+<ResponseField name="ModalEventData" type="object">
+  <Expandable title="properties">
+    <ResponseField name="open" type="boolean">
+      Whether the modal is currently open.
+    </ResponseField>
+    <ResponseField name="title" type="Node">
+      Current title as a DOM `Node`.
+    </ResponseField>
+    <ResponseField name="content" type="Node">
+      Current body content as a DOM `Node`.
+    </ResponseField>
+    <ResponseField name="attributes" type="Record&lt;string, any&gt;">
+      Custom attributes set on the modal wrapper.
+    </ResponseField>
+    <ResponseField name="close" type="() => void">
+      Callback to close the modal programmatically (useful in custom UI integrations).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```ts
+editor.on('modal:open', () => {
+  console.log('Modal opened');
+});
+
+editor.on('modal:close', () => {
+  console.log('Modal closed');
+});
+
+// Catch-all — useful for driving a fully custom modal
+editor.on('modal', ({ open, title, content, close }) => {
+  if (open) {
+    myModal.show({ title: title.textContent, body: content });
+    myModal.onClose(() => close());
+  } else {
+    myModal.hide();
+  }
+});
+```
+
+---
+
+## Example: modal with custom HTML content
+
+<CodeGroup>
+```ts TypeScript
+// Build a form inside the modal
+const form = document.createElement('div');
+form.innerHTML = `
+  <label>Name</label>
+  <input type="text" id="user-name" style="display:block;width:100%;margin:8px 0"/>
+  <button id="submit-btn">Submit</button>
+`;
+
+form.querySelector('#submit-btn')!.addEventListener('click', () => {
+  const name = (form.querySelector('#user-name') as HTMLInputElement).value;
+  console.log('Name submitted:', name);
+  modal.close();
+});
+
+modal.open({
+  title: 'Enter your name',
+  content: form,
+});
+
+// One-time cleanup after the modal closes
+modal.onceClose(() => {
+  console.log('Form dismissed');
+});
+```
+
+```js JavaScript
+const form = document.createElement('div');
+form.innerHTML = `
+  <label>Name</label>
+  <input type="text" id="user-name" style="display:block;width:100%;margin:8px 0"/>
+  <button id="submit-btn">Submit</button>
+`;
+
+form.querySelector('#submit-btn').addEventListener('click', () => {
+  const name = form.querySelector('#user-name').value;
+  console.log('Name submitted:', name);
+  modal.close();
+});
+
+modal.open({ title: 'Enter your name', content: form });
+```
+</CodeGroup>
+
+---
+
+## Configuration
+
+Pass `modal` options during `grapesjs.init()`:
+
+```ts
+const editor = grapesjs.init({
+  modal: {
+    custom: true, // Use your own modal UI
+  },
+});
+
+// Then drive the modal from the `modal` event
+editor.on('modal', (props) => {
+  // props.open, props.title, props.content, props.attributes, props.close
+});
+```
+
+<Note>
+  When `modal.custom: true`, the built-in HTML modal is not rendered. You are responsible for subscribing to the `modal` event and rendering your own dialog. You must call `props.close()` when your dialog is dismissed so that GrapesJS can keep its state in sync.
+</Note>

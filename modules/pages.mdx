@@ -1,0 +1,217 @@
+---
+title: "Page Manager: Multi-Page Editing in GrapesJS"
+description: "Add, switch, and remove pages in a GrapesJS project. Each page has its own independent component tree and styles, with a full programmatic API."
+---
+
+The Page Manager lets you build projects with multiple independent pages inside a single GrapesJS editor instance. Every page owns its own component tree and style rules, so changes on one page never affect another. Even if you only need a single page, GrapesJS creates one under the hood—keeping the API consistent and making it trivial to add more pages later.
+
+<Note>
+This guide covers GrapesJS v0.21.1 and later.
+</Note>
+
+## Initialisation
+
+The simplest editor setup automatically creates one page from your top-level `components` and `style` options.
+
+```javascript
+const editor = grapesjs.init({
+  container: '#gjs',
+  storageManager: false,
+  style: '.my-el { color: red }',
+  components: '<div class="my-el">Hello world!</div>',
+});
+```
+
+GrapesJS migrates that config internally to the equivalent `pageManager` structure:
+
+```javascript
+grapesjs.init({
+  container: '#gjs',
+  storageManager: false,
+  pageManager: {
+    pages: [
+      {
+        id: 'my-first-page',
+        styles: '.my-el { color: red }',     // note: 'styles' not 'style'
+        component: '<div class="my-el">Hello world!</div>', // note: 'component' not 'components'
+      },
+    ],
+  },
+});
+```
+
+<Warning>
+When defining pages directly, use `styles` (plural) and `component` (singular). The top-level shorthand keys `style` and `components` are different and not used inside the `pageManager.pages` array.
+</Warning>
+
+### Multiple pages at init time
+
+```javascript
+grapesjs.init({
+  pageManager: {
+    pages: [
+      {
+        id: 'home',
+        name: 'Home',
+        styles: '.hero { font-size: 2rem }',
+        component: '<section class="hero">Welcome</section>',
+      },
+      {
+        id: 'about',
+        name: 'About',
+        styles: '.about { color: #555 }',
+        component: '<div class="about">About us</div>',
+      },
+      {
+        id: 'contact',
+        name: 'Contact',
+        component: '<form>...</form>',
+      },
+    ],
+  },
+});
+```
+
+## Programmatic API
+
+Get the module via `editor.Pages`, then use the methods below.
+
+```javascript
+const pages = editor.Pages;
+
+// All pages
+const allPages = pages.getAll(); // Page[]
+
+// Currently selected page
+const current = pages.getSelected();
+
+// Add a new page
+const newPage = pages.add({
+  id: 'new-page-id',          // optional — a random ID is generated if omitted
+  name: 'New Page',
+  styles: '.my-class { color: red }',
+  component: '<div class="my-class">My element</div>',
+});
+
+// Retrieve a page by ID
+const page = pages.get('new-page-id');
+
+// Switch to a page
+pages.select('new-page-id');
+// or pass the Page instance
+pages.select(page);
+
+// Move a page to a different position (0-indexed)
+pages.move('new-page-id', { at: 0 });
+
+// Remove a page
+pages.remove('new-page-id');
+// or pass the Page instance
+pages.remove(page);
+```
+
+### Getting HTML and CSS from a page
+
+Each page has a main component (the canvas body wrapper). Pass it to `editor.getHtml()` and `editor.getCss()` to get the rendered output for that page only.
+
+```javascript
+const page = pages.get('home');
+const component = page.getMainComponent();
+
+const html = editor.getHtml({ component });
+const css  = editor.getCss({ component });
+
+console.log('HTML:', html);
+console.log('CSS:', css);
+```
+
+<Tip>
+Use this pattern inside a `storage:start:store` or `onStore` callback to ship rendered HTML/CSS to your server alongside the project JSON.
+</Tip>
+
+## Page isolation
+
+Components and styles belong to the page they were created on. Selecting a different page swaps the canvas content and style context entirely. The Layers panel, Style Manager, and Selector Manager all reflect the active page.
+
+```javascript
+// Get all image components across every page and every frame
+const allImages = pages
+  .getAllWrappers()
+  .flatMap((wrapper) => wrapper.findType('image'));
+```
+
+## Building a custom page manager UI
+
+GrapesJS does not ship a default page switcher panel. Build your own by listening to the `page` catch-all event and re-rendering your component whenever the page list changes.
+
+<Steps>
+  <Step title="Subscribe to page changes">
+
+```javascript
+editor.on('page', () => {
+  renderPageList();
+});
+```
+
+  </Step>
+  <Step title="Render the page list">
+
+```javascript
+function renderPageList() {
+  const pages   = editor.Pages.getAll();
+  const current = editor.Pages.getSelected();
+
+  const list = document.getElementById('page-list');
+  list.innerHTML = '';
+
+  pages.forEach((page) => {
+    const item = document.createElement('div');
+    item.textContent = page.get('name') || page.id;
+    item.className   = page.id === current?.id ? 'page active' : 'page';
+    item.addEventListener('click', () => editor.Pages.select(page));
+    list.appendChild(item);
+  });
+}
+```
+
+  </Step>
+  <Step title="Add and remove pages from your UI">
+
+```javascript
+// Add a new blank page
+document.getElementById('add-page').addEventListener('click', () => {
+  const count = editor.Pages.getAll().length;
+  editor.Pages.add({ name: `Page ${count + 1}` });
+});
+
+// Remove the current page (guard against removing the last one)
+document.getElementById('remove-page').addEventListener('click', () => {
+  const pm = editor.Pages;
+  if (pm.getAll().length > 1) {
+    pm.remove(pm.getSelected());
+  }
+});
+```
+
+  </Step>
+</Steps>
+
+## Events reference
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `page:add` | `Page, options` | New page added |
+| `page:remove` | `Page, options` | Page removed |
+| `page:select` | `Page, previousPage` | Active page changed |
+| `page:update` | `Page, changes` | Page properties updated |
+| `page` | `{ event, page, options }` | Catch-all for all page events |
+
+```javascript
+editor.on('page:select', (page, previousPage) => {
+  console.log('Switched from', previousPage?.get('name'), 'to', page.get('name'));
+});
+
+editor.on('page:add', (page) => {
+  console.log('New page created:', page.id);
+});
+```

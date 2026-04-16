@@ -1,0 +1,755 @@
+---
+title: "Components API: ComponentManager & Component Model"
+description: "Reference for GrapesJS ComponentManager and Component model. Register custom types, traverse the component tree, and manipulate canvas elements at runtime."
+---
+
+The Components module is the backbone of every GrapesJS project. It manages the entire tree of nodes rendered in the canvas, provides a typed registry so you can define fully custom elements, and exposes a rich Component model you can use to read, write, and traverse nodes at runtime. Access the manager as `editor.Components` (or the legacy alias `editor.DomComponents`).
+
+## ComponentManager
+
+`editor.Components` — manages the component type registry and the root component tree.
+
+### getWrapper
+
+```typescript
+getWrapper(): Component | undefined
+```
+
+Returns the root wrapper component — the equivalent of `<body>` in a standard HTML page. Style it or iterate its children to inspect the full canvas tree.
+
+<CodeGroup>
+```typescript TypeScript
+const wrapper = editor.Components.getWrapper();
+wrapper?.set('style', { 'background-color': '#f5f5f5' });
+wrapper?.set('attributes', { 'data-page': 'home' });
+```
+```javascript JavaScript
+const wrapper = editor.Components.getWrapper();
+wrapper.set('style', { 'background-color': '#f5f5f5' });
+wrapper.set('attributes', { 'data-page': 'home' });
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Component | undefined">
+  The root wrapper component of the currently selected page.
+</ResponseField>
+
+---
+
+### getComponents
+
+```typescript
+getComponents(): Components
+```
+
+Returns the **collection** of top-level components — the direct children of the wrapper. You can add, remove, and iterate items using standard Backbone collection methods.
+
+<CodeGroup>
+```typescript TypeScript
+const components = editor.Components.getComponents();
+console.log(components.length); // number of top-level components
+```
+```javascript JavaScript
+const components = editor.Components.getComponents();
+console.log(components.length);
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Components">
+  A Backbone `Collection` of `Component` models.
+</ResponseField>
+
+---
+
+### addComponent
+
+```typescript
+addComponent(
+  component: ComponentAdd,
+  opts?: AddComponentsOption
+): Component | Component[]
+```
+
+Adds one or more components as children of the root wrapper. Equivalent to calling `editor.Components.getComponents().add(...)`.
+
+<ParamField path="component" type="ComponentAdd" required>
+  A component definition object, an HTML string, an existing `Component` instance, or an array of any of these.
+</ParamField>
+
+<ParamField path="opts" type="AddComponentsOption">
+  Options forwarded to the underlying collection `add` call (e.g., `{ at: 0 }` to prepend).
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const button = editor.Components.addComponent({
+  tagName: 'button',
+  content: 'Click me',
+  attributes: { class: 'btn btn-primary' },
+  style: { padding: '8px 16px' },
+});
+```
+```javascript JavaScript
+const button = editor.Components.addComponent({
+  tagName: 'button',
+  content: 'Click me',
+  attributes: { class: 'btn btn-primary' },
+  style: { padding: '8px 16px' },
+});
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Component | Component[]">
+  The newly added component(s).
+</ResponseField>
+
+---
+
+### clear
+
+```typescript
+clear(opts?: object): this
+```
+
+Removes every top-level component from the canvas. Use with caution — this action is tracked by the undo manager.
+
+<CodeGroup>
+```typescript TypeScript
+editor.Components.clear();
+```
+```javascript JavaScript
+editor.Components.clear();
+```
+</CodeGroup>
+
+---
+
+### addType
+
+```typescript
+addType(type: string, methods: AddComponentTypeOptions): this
+```
+
+Registers a new component type (or updates an existing one). This is the primary extension point for building custom, reusable component behaviours.
+
+<ParamField path="type" type="string" required>
+  A unique string identifier for the component type, e.g. `'my-card'`.
+</ParamField>
+
+<ParamField path="methods" type="AddComponentTypeOptions" required>
+  Definition object for the new type.
+
+  <Expandable title="AddComponentTypeOptions properties">
+    <ParamField path="isComponent" type="(el: HTMLElement) => boolean | ComponentDefinitionDefined | undefined">
+      Called during HTML parsing. Return `true` (or a definition object with `type` set) when the given DOM element should be recognized as this component type. Return falsy to skip.
+    </ParamField>
+    <ParamField path="model" type="Partial<ComponentModelDefinition>">
+      Model overrides. Define `defaults` for default property values, `init()` for construction-time setup, and `updated(property, value, previous)` to react to property changes.
+    </ParamField>
+    <ParamField path="view" type="Partial<ComponentViewDefinition>">
+      View overrides. Define `events` for DOM event bindings, `render()` to control the canvas render, and `onRender()` as a post-render hook.
+    </ParamField>
+    <ParamField path="extend" type="string">
+      Type ID to extend. Defaults to `'default'`.
+    </ParamField>
+    <ParamField path="extendView" type="string">
+      Type ID whose view to extend (can differ from `extend`).
+    </ParamField>
+    <ParamField path="extendFn" type="string[]">
+      Model method names that should call both parent and child implementations.
+    </ParamField>
+    <ParamField path="extendFnView" type="string[]">
+      View method names that should call both parent and child implementations.
+    </ParamField>
+    <ParamField path="block" type="boolean | Partial<BlockProperties>">
+      Pass `true` to auto-register a Block for this type, or provide a partial `BlockProperties` object to customise it.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+editor.Components.addType('my-counter', {
+  isComponent: (el) => el.tagName === 'SPAN' && el.dataset.type === 'counter',
+
+  model: {
+    defaults: {
+      tagName: 'span',
+      attributes: { 'data-type': 'counter' },
+      count: 0,
+    },
+    init() {
+      this.listenTo(this, 'change:count', this.onCountChange);
+    },
+    updated(property, value, previous) {
+      console.log(`${property} changed from ${previous} to ${value}`);
+    },
+    onCountChange() {
+      this.set('content', String(this.get('count')));
+    },
+  },
+
+  view: {
+    events: {
+      click: 'onClick',
+    },
+    onClick() {
+      const model = this.model;
+      model.set('count', (model.get('count') as number) + 1);
+    },
+    onRender() {
+      this.el.style.cursor = 'pointer';
+    },
+  },
+});
+```
+```javascript JavaScript
+editor.Components.addType('my-counter', {
+  isComponent: (el) => el.tagName === 'SPAN' && el.dataset.type === 'counter',
+
+  model: {
+    defaults: {
+      tagName: 'span',
+      attributes: { 'data-type': 'counter' },
+      count: 0,
+    },
+    init() {
+      this.listenTo(this, 'change:count', this.onCountChange);
+    },
+    updated(property, value, previous) {
+      console.log(`${property} changed from ${previous} to ${value}`);
+    },
+    onCountChange() {
+      this.set('content', String(this.get('count')));
+    },
+  },
+
+  view: {
+    events: { click: 'onClick' },
+    onClick() {
+      const model = this.model;
+      model.set('count', model.get('count') + 1);
+    },
+    onRender() {
+      this.el.style.cursor = 'pointer';
+    },
+  },
+});
+```
+</CodeGroup>
+
+<Note>
+  If a type with the same `id` already exists, `addType` updates it in place rather than creating a duplicate entry. The `component:type:update` event is fired instead of `component:type:add`.
+</Note>
+
+---
+
+### getType
+
+```typescript
+getType(type: string): { id: string; model: any; view: any } | undefined
+```
+
+Retrieves a registered component type definition by its string ID.
+
+<ParamField path="type" type="string" required>
+  The component type ID to look up (e.g. `'image'`, `'text'`, `'default'`).
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const imageType = editor.Components.getType('image');
+console.log(imageType?.model); // ComponentImage class
+```
+```javascript JavaScript
+const imageType = editor.Components.getType('image');
+console.log(imageType?.model);
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="{ id: string; model: any; view: any } | undefined">
+  The type definition object, or `undefined` if not found.
+</ResponseField>
+
+---
+
+### getTypes
+
+```typescript
+getTypes(): ComponentStackItem[]
+```
+
+Returns the full array of all registered component types. Types are stored in priority order — the first matching type wins during HTML parsing.
+
+<CodeGroup>
+```typescript TypeScript
+const allTypes = editor.Components.getTypes();
+allTypes.forEach((t) => console.log(t.id));
+```
+```javascript JavaScript
+editor.Components.getTypes().forEach((t) => console.log(t.id));
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="ComponentStackItem[]">
+  Ordered array of `{ id, model, view }` objects.
+</ResponseField>
+
+---
+
+## Component Model
+
+Each node in the canvas is a `Component` instance. Components extend Backbone `Model` and support `get` / `set` for reactive property access in addition to their own higher-level helpers.
+
+### get / set
+
+```typescript
+get(prop: string): any
+set(prop: string | object, value?: any): this
+```
+
+Get or set any component property. Calling `set` triggers change events and propagates updates to the canvas in real time.
+
+<CodeGroup>
+```typescript TypeScript
+const tagName = component.get('tagName'); // 'div'
+component.set('tagName', 'section');
+component.set({
+  draggable: false,
+  removable: false,
+});
+```
+```javascript JavaScript
+const tagName = component.get('tagName'); // 'div'
+component.set('tagName', 'section');
+component.set({ draggable: false, removable: false });
+```
+</CodeGroup>
+
+---
+
+### append
+
+```typescript
+append<T extends Component = Component>(
+  components: ComponentAdd,
+  opts?: AddOptions
+): T[]
+```
+
+Adds one or more child components to this component's children collection.
+
+<ParamField path="components" type="ComponentAdd" required>
+  A definition object, HTML string, `Component` instance, or array of these.
+</ParamField>
+
+<ParamField path="opts" type="AddOptions">
+  Backbone collection options (e.g., `{ at: 0 }` to insert at a specific index).
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const [video, div] = component.append('<video></video><div></div>');
+// Insert at the beginning
+component.append(otherComponent, { at: 0 });
+```
+```javascript JavaScript
+const [video, div] = component.append('<video></video><div></div>');
+component.append(otherComponent, { at: 0 });
+```
+</CodeGroup>
+
+<ResponseField name="returns" type="Component[]">
+  Array of the appended component instances.
+</ResponseField>
+
+---
+
+### components
+
+```typescript
+components(): Components
+components(components: ComponentAdd, opts?: ResetComponentsOptions): Component[]
+```
+
+When called without arguments returns the current children `Collection`. When called with a value, **replaces** the entire children collection and returns the new children array.
+
+<CodeGroup>
+```typescript TypeScript
+// Get current children
+const children = component.components();
+console.log(children.length);
+
+// Replace children
+component.components('<span>Hello</span><span>World</span>');
+```
+```javascript JavaScript
+const children = component.components();
+component.components('<span>Hello</span><span>World</span>');
+```
+</CodeGroup>
+
+---
+
+### find
+
+```typescript
+find(query: string): Component[]
+```
+
+Finds all descendant components matching a CSS selector string. Requires the component to already be rendered in the canvas.
+
+<ParamField path="query" type="string" required>
+  CSS selector string, e.g. `'div > .my-class'`.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const buttons = component.find('button.cta');
+buttons.forEach((btn) => btn.set('removable', false));
+```
+```javascript JavaScript
+const buttons = component.find('button.cta');
+buttons.forEach((btn) => btn.set('removable', false));
+```
+</CodeGroup>
+
+<Warning>
+  `find` relies on the rendered DOM. If the component has not been mounted yet, use `findType` instead.
+</Warning>
+
+---
+
+### findType
+
+```typescript
+findType(type: string): Component[]
+```
+
+Recursively searches all descendants for components of the given type. Works before the component is rendered.
+
+<ParamField path="type" type="string" required>
+  Component type ID, e.g. `'image'`, `'text'`.
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const images = wrapper.findType('image');
+console.log(images.length);
+```
+```javascript JavaScript
+const images = wrapper.findType('image');
+```
+</CodeGroup>
+
+---
+
+### toHTML
+
+```typescript
+toHTML(opts?: ToHTMLOptions): string
+```
+
+Serializes the component and all its children to an HTML string.
+
+<ParamField path="opts" type="ToHTMLOptions">
+  <Expandable title="options">
+    <ParamField path="tag" type="string">Custom tag name to use instead of the component's `tagName`.</ParamField>
+    <ParamField path="attributes" type="object | Function">Custom attributes object or a function `(component, attrs) => attrs` to transform attributes dynamically.</ParamField>
+    <ParamField path="withProps" type="boolean">Include component properties as `data-gjs-*` attributes for re-importable HTML.</ParamField>
+    <ParamField path="altQuoteAttr" type="boolean">Use single quotes for attribute values containing double quotes.</ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```typescript TypeScript
+const html = component.toHTML();
+// '<div class="my-class">Hello</div>'
+
+// With custom attributes
+const htmlCustom = component.toHTML({
+  attributes: { 'data-export': 'true' },
+});
+```
+```javascript JavaScript
+const html = component.toHTML();
+const htmlCustom = component.toHTML({ attributes: { 'data-export': 'true' } });
+```
+</CodeGroup>
+
+---
+
+### getEl
+
+```typescript
+getEl(): HTMLElement | undefined
+```
+
+Returns the live DOM element in the canvas iframe. Useful when you need to interact with the raw element directly.
+
+<CodeGroup>
+```typescript TypeScript
+const el = component.getEl();
+el?.classList.add('highlighted');
+```
+```javascript JavaScript
+const el = component.getEl();
+el?.classList.add('highlighted');
+```
+</CodeGroup>
+
+---
+
+### remove
+
+```typescript
+remove(): this
+```
+
+Removes the component from the canvas. The action is tracked by the undo manager.
+
+<CodeGroup>
+```typescript TypeScript
+const selected = editor.getSelected();
+selected?.remove();
+```
+```javascript JavaScript
+editor.getSelected()?.remove();
+```
+</CodeGroup>
+
+---
+
+### clone
+
+```typescript
+clone(opt?: { symbol?: boolean; symbolInv?: boolean }): this
+```
+
+Creates a deep copy of the component, including its children, styles, and traits. The `component:clone` event is fired on the editor after cloning.
+
+<CodeGroup>
+```typescript TypeScript
+const copy = component.clone();
+component.parent()?.append(copy);
+```
+```javascript JavaScript
+const copy = component.clone();
+component.parent()?.append(copy);
+```
+</CodeGroup>
+
+---
+
+### is
+
+```typescript
+is(type: string): boolean
+```
+
+Returns `true` if the component's `type` property matches the given string.
+
+<CodeGroup>
+```typescript TypeScript
+if (component.is('image')) {
+  console.log('This is an image component');
+}
+```
+```javascript JavaScript
+if (component.is('image')) {
+  console.log('This is an image component');
+}
+```
+</CodeGroup>
+
+---
+
+### parent
+
+```typescript
+parent(opts?: { prev?: boolean }): Component | undefined
+```
+
+Returns the parent component, or `undefined` if the component has no parent (e.g., the wrapper).
+
+<CodeGroup>
+```typescript TypeScript
+const parentCmp = component.parent();
+console.log(parentCmp?.get('tagName'));
+```
+```javascript JavaScript
+const parentCmp = component.parent();
+```
+</CodeGroup>
+
+---
+
+## Component Properties
+
+The following properties can be read with `get()` and written with `set()`.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `tagName` | `string` | `'div'` | HTML tag rendered in the canvas |
+| `type` | `string` | `''` | Component type identifier |
+| `attributes` | `object` | `{}` | Key-value HTML attributes |
+| `classes` | `Selectors` | `[]` | CSS class selectors |
+| `traits` | `Traits` | `['id','title']` | Editable traits shown in the panel |
+| `draggable` | `boolean \| string \| Function` | `true` | Controls whether the component can be dragged |
+| `droppable` | `boolean \| string \| Function` | `true` | Controls whether children can be dropped inside |
+| `resizable` | `boolean \| object` | `false` | Enables resizing; pass an options object for Resizer config |
+| `editable` | `boolean` | `false` | Allows in-canvas text editing |
+| `layerable` | `boolean` | `true` | Shows the component in the Layers panel |
+| `selectable` | `boolean` | `true` | Allows the component to be selected in the canvas |
+| `removable` | `boolean` | `true` | Shows the delete toolbar button |
+| `copyable` | `boolean` | `true` | Shows the clone toolbar button |
+| `locked` | `boolean` | `undefined` | Disables selection of the component and its children |
+| `content` | `string` | `''` | Inner text content (prepended before children) |
+| `style` | `object` | `{}` | Inline style properties |
+
+---
+
+## Events
+
+Listen to component events on the editor instance with `editor.on(event, callback)`.
+
+| Event | Payload | Description |
+|---|---|---|
+| `component:add` | `Component` | Component added to the canvas |
+| `component:remove` | `Component` | Component removed |
+| `component:create` | `Component` | Component model created (before mount) |
+| `component:mount` | `Component` | Component mounted to DOM |
+| `component:update` | `Component` | Component property updated |
+| `component:update:{prop}` | `Component` | Specific property updated |
+| `component:styleUpdate` | `Component` | Component style changed |
+| `component:styleUpdate:{prop}` | `Component` | Specific style property changed |
+| `component:selected` | `Component` | Component selected |
+| `component:deselected` | `Component` | Component deselected |
+| `component:clone` | `Component` | Component cloned |
+| `component:type:add` | type object | New component type registered |
+| `component:type:update` | type object | Existing component type updated |
+| `component:drag:start` | `{ target, parent, index }` | Drag started |
+| `component:drag` | `{ target, parent, index }` | During drag |
+| `component:drag:end` | `{ target, parent, index }` | Drag ended |
+
+```typescript
+editor.on('component:add', (component) => {
+  console.log('Added:', component.get('tagName'));
+});
+
+editor.on('component:styleUpdate:color', (component) => {
+  console.log('Color changed on:', component.getId());
+});
+```
+
+---
+
+## Custom Component Types
+
+The following example shows the full lifecycle hooks available when creating custom types.
+
+<CodeGroup>
+```typescript TypeScript
+editor.Components.addType('hero-section', {
+  // Parser hint: match any <section data-type="hero"> element
+  isComponent: (el) =>
+    el.tagName === 'SECTION' && el.dataset.type === 'hero'
+      ? { type: 'hero-section' }
+      : undefined,
+
+  model: {
+    defaults: {
+      tagName: 'section',
+      attributes: { 'data-type': 'hero' },
+      droppable: true,
+      style: { 'min-height': '400px' },
+    },
+
+    // Called once after the component is constructed
+    init() {
+      this.listenTo(this, 'change:attributes', this.onAttrsChange);
+    },
+
+    // Called on any property change
+    updated(property: string, value: any, previous: any) {
+      if (property === 'style') {
+        console.log('Style updated');
+      }
+    },
+
+    onAttrsChange() {
+      console.log('Attributes changed', this.getAttributes());
+    },
+  },
+
+  view: {
+    // Native DOM event bindings
+    events: {
+      dblclick: 'onDblClick',
+    },
+
+    // Full canvas render control
+    render() {
+      // Call the default render first
+      (this.constructor as any).__super__.render.apply(this);
+      this.el.setAttribute('data-rendered', 'true');
+      return this;
+    },
+
+    // Post-render hook
+    onRender({ el }: { el: HTMLElement }) {
+      el.style.outline = '2px dashed #ccc';
+    },
+
+    onDblClick() {
+      console.log('Hero section double-clicked');
+    },
+  },
+});
+```
+```javascript JavaScript
+editor.Components.addType('hero-section', {
+  isComponent: (el) =>
+    el.tagName === 'SECTION' && el.dataset.type === 'hero'
+      ? { type: 'hero-section' }
+      : undefined,
+
+  model: {
+    defaults: {
+      tagName: 'section',
+      attributes: { 'data-type': 'hero' },
+      droppable: true,
+      style: { 'min-height': '400px' },
+    },
+    init() {
+      this.listenTo(this, 'change:attributes', this.onAttrsChange);
+    },
+    updated(property, value, previous) {
+      if (property === 'style') console.log('Style updated');
+    },
+    onAttrsChange() {
+      console.log('Attributes changed', this.getAttributes());
+    },
+  },
+
+  view: {
+    events: { dblclick: 'onDblClick' },
+    render() {
+      this.constructor.__super__.render.apply(this);
+      this.el.setAttribute('data-rendered', 'true');
+      return this;
+    },
+    onRender({ el }) {
+      el.style.outline = '2px dashed #ccc';
+    },
+    onDblClick() {
+      console.log('Hero section double-clicked');
+    },
+  },
+});
+```
+</CodeGroup>
+
+<Tip>
+  Pass `extend: 'text'` to build on top of the built-in text component type and inherit its inline editing behaviour.
+</Tip>

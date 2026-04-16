@@ -1,0 +1,320 @@
+---
+title: "Panels Manager API Reference - GrapesJS UI Modules"
+description: "Complete API reference for editor.Panels in GrapesJS. Add, configure, and remove toolbar panels and buttons to build a fully custom editor layout."
+---
+
+The Panels module (`editor.Panels`) manages the toolbar areas that surround the GrapesJS canvas. Panels are named containers that hold buttons; each button can trigger an editor command, toggle state, or run arbitrary code. The default editor ships with a handful of built-in panels, but you can add, remove, and rewire panels and buttons entirely at runtime to match any custom layout.
+
+```ts
+// Obtain the module
+const panels = editor.Panels;
+```
+
+---
+
+## Methods
+
+### `addPanel(panelDef)`
+
+Add a new panel to the UI.
+
+<ParamField path="panelDef" type="Panel | PanelProperties" required>
+  A Panel instance or a panel definition object. See [Panel Properties](#panel-properties) for available fields.
+</ParamField>
+
+<ResponseField name="returns" type="Panel">
+  The newly created `Panel` instance.
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+const panel = panels.addPanel({
+  id: 'my-panel',
+  el: '.my-panel-element',  // mount to existing DOM element
+  visible: true,
+  buttons: [
+    {
+      id: 'undo',
+      label: 'Undo',
+      command: 'core:undo',
+      attributes: { title: 'Undo last action' },
+    },
+  ],
+});
+```
+
+```js JavaScript
+const panel = panels.addPanel({
+  id: 'my-panel',
+  appendTo: '#toolbar',
+  buttons: [
+    { id: 'save', label: 'Save', command: 'my:save' },
+  ],
+});
+```
+</CodeGroup>
+
+---
+
+### `getPanel(id)`
+
+Get a panel by its ID.
+
+<ParamField path="id" type="string" required>
+  The panel ID.
+</ParamField>
+
+<ResponseField name="returns" type="Panel | null">
+  The matching `Panel`, or `null` if not found.
+</ResponseField>
+
+```ts
+const panel = panels.getPanel('options');
+```
+
+---
+
+### `getPanels()`
+
+Return the collection of all registered panels.
+
+<ResponseField name="returns" type="Collection&lt;Panel&gt;">
+  Backbone collection of all Panel instances.
+</ResponseField>
+
+```ts
+panels.getPanels().forEach((p) => console.log(p.get('id')));
+```
+
+---
+
+### `removePanel(panel)`
+
+Remove a panel from the collection.
+
+<ParamField path="panel" type="Panel | string" required>
+  A Panel instance or the panel ID string.
+</ParamField>
+
+<ResponseField name="returns" type="Panel">
+  The removed Panel instance.
+</ResponseField>
+
+```ts
+panels.removePanel('my-panel');
+// or by instance
+const p = panels.getPanel('my-panel');
+p && panels.removePanel(p);
+```
+
+---
+
+### `addButton(panelId, buttonDef)`
+
+Add a button to an existing panel.
+
+<ParamField path="panelId" type="string" required>
+  ID of the panel to add the button to.
+</ParamField>
+
+<ParamField path="buttonDef" type="object | Button" required>
+  A button definition object or Button instance. See [Button Properties](#button-properties).
+</ParamField>
+
+<ResponseField name="returns" type="Button | null">
+  The added Button, or `null` if the panel was not found.
+</ResponseField>
+
+<CodeGroup>
+```ts TypeScript
+const btn = panels.addButton('options', {
+  id: 'preview',
+  label: 'Preview',
+  command: 'core:preview',
+  attributes: { title: 'Toggle preview mode' },
+  active: false,
+  togglable: true,
+});
+```
+
+```js JavaScript
+// Command as an inline object
+panels.addButton('options', {
+  id: 'my-action',
+  label: 'Action',
+  command: {
+    run(editor) { /* ... */ },
+    stop(editor) { /* ... */ },
+  },
+});
+
+// Command as a plain function (run-only)
+panels.addButton('options', {
+  id: 'alert-btn',
+  label: 'Alert',
+  command: (editor) => alert('Hello'),
+});
+```
+</CodeGroup>
+
+---
+
+### `getButton(panelId, buttonId)`
+
+Get a button from a panel.
+
+<ParamField path="panelId" type="string" required>
+  ID of the panel containing the button.
+</ParamField>
+
+<ParamField path="buttonId" type="string" required>
+  ID of the button to retrieve.
+</ParamField>
+
+<ResponseField name="returns" type="Button | null">
+  The Button instance, or `null` if not found.
+</ResponseField>
+
+```ts
+const btn = panels.getButton('options', 'preview');
+if (btn) btn.set('active', true);
+```
+
+---
+
+### `removeButton(panelId, buttonId)`
+
+Remove a button from a panel.
+
+<ParamField path="panelId" type="string" required>
+  ID of the panel.
+</ParamField>
+
+<ParamField path="buttonId" type="string" required>
+  ID of the button to remove.
+</ParamField>
+
+<ResponseField name="returns" type="Button | null | false">
+  The removed Button, `null` if the panel wasn't found, or `false` if the button wasn't found.
+</ResponseField>
+
+```ts
+panels.removeButton('options', 'preview');
+```
+
+---
+
+## Panel Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the panel.
+</ParamField>
+
+<ParamField path="el" type="string">
+  CSS selector of an existing DOM element to use as the panel container. Mutually exclusive with `appendTo`.
+</ParamField>
+
+<ParamField path="appendTo" type="string">
+  CSS selector of the element to which the panel should be appended. The panel creates its own container element.
+</ParamField>
+
+<ParamField path="visible" type="boolean">
+  Initial visibility of the panel. Defaults to `true`.
+</ParamField>
+
+<ParamField path="buttons" type="object[]">
+  Array of button definition objects to add on creation. Defaults to `[]`.
+</ParamField>
+
+<ParamField path="attributes" type="Record&lt;string, any&gt;">
+  HTML attributes applied to the panel's DOM element. Defaults to `{}`.
+</ParamField>
+
+<ParamField path="resizable" type="boolean | ResizerOptions">
+  Enable resizing for the panel. Pass `true` for default resizer options, or a `ResizerOptions` object for fine-grained control.
+</ParamField>
+
+<ParamField path="content" type="string">
+  Static HTML string to embed inside the panel.
+</ParamField>
+
+---
+
+## Button Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the button within its panel.
+</ParamField>
+
+<ParamField path="label" type="string">
+  Button label text or HTML. Defaults to `''`.
+</ParamField>
+
+<ParamField path="command" type="string | { run: Function; stop: Function } | Function">
+  The editor command to run. Can be a registered command ID string, an inline object with `run`/`stop` methods, or a plain function (treated as `run` only).
+</ParamField>
+
+<ParamField path="active" type="boolean">
+  Whether the button starts in the active/toggled-on state. Defaults to `false`.
+</ParamField>
+
+<ParamField path="togglable" type="boolean">
+  When `true`, clicking the button again stops the command and sets active to `false`. When `false`, the button acts as a one-shot trigger. Defaults to `true`.
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class(es) to apply to the button element. Defaults to `''`.
+</ParamField>
+
+<ParamField path="context" type="string">
+  Namespace for grouping mutually exclusive buttons. Only one button with the same `context` can be active at a time.
+</ParamField>
+
+<ParamField path="attributes" type="Record&lt;string, any&gt;">
+  HTML attributes applied to the button element (e.g. `{ title: 'Tooltip text' }`). Defaults to `{}`.
+</ParamField>
+
+<ParamField path="disable" type="boolean">
+  Render the button in a disabled state. Defaults to `false`.
+</ParamField>
+
+---
+
+## Example: building a minimal custom toolbar
+
+<CodeGroup>
+```ts TypeScript
+// Remove all default panels
+grapesjs.init({
+  panels: { defaults: [] },
+  // ...
+});
+
+// Re-add what you need
+panels.addPanel({
+  id: 'toolbar',
+  appendTo: '#my-toolbar',
+  buttons: [
+    { id: 'undo',   label: '↩',  command: 'core:undo',   togglable: false },
+    { id: 'redo',   label: '↪',  command: 'core:redo',   togglable: false },
+    { id: 'preview', label: '▶', command: 'core:preview' },
+  ],
+});
+```
+
+```js JavaScript
+panels.addPanel({
+  id: 'toolbar',
+  appendTo: '#my-toolbar',
+  buttons: [
+    { id: 'undo',    label: '↩', command: 'core:undo',    togglable: false },
+    { id: 'redo',    label: '↪', command: 'core:redo',    togglable: false },
+    { id: 'preview', label: '▶', command: 'core:preview' },
+  ],
+});
+```
+</CodeGroup>
+
+<Warning>
+  Panels use Backbone models internally. Mutating buttons directly on the DOM will be overwritten on the next render cycle; always go through the API.
+</Warning>

@@ -1,0 +1,334 @@
+---
+title: "Device Manager API — Responsive Preview in GrapesJS"
+description: "Full API reference for editor.DeviceManager. Add custom devices, manage responsive breakpoints, select the active viewport, and respond to device change events."
+---
+
+The `DeviceManager` module (`editor.Devices`) controls the responsive preview inside the GrapesJS canvas. Each device defines an iframe width (and optional height) that is applied when the device is selected, along with a separate `widthMedia` value used when generating CSS `@media` rules. GrapesJS ships with four built-in devices — Desktop, Tablet, Mobile landscape, and Mobile portrait — and you can add as many custom devices as your project requires.
+
+## Configuration
+
+Pass `deviceManager` options when initialising the editor:
+
+```js
+const editor = grapesjs.init({
+  deviceManager: {
+    default: 'desktop', // id of the device to select on startup
+    devices: [
+      { id: 'desktop',        name: 'Desktop',          width: '' },
+      { id: 'tablet',         name: 'Tablet',            width: '770px',  widthMedia: '992px' },
+      { id: 'mobileLandscape', name: 'Mobile landscape', width: '568px',  widthMedia: '768px' },
+      { id: 'mobilePortrait',  name: 'Mobile portrait',  width: '320px',  widthMedia: '480px' },
+    ],
+  },
+});
+```
+
+<Tip>
+  Setting `width` to an empty string `''` means "full width" — the canvas iframe expands to fill the available space. This is the correct value for the Desktop device.
+</Tip>
+
+---
+
+## Methods
+
+### `add(props, options?)`
+
+Registers a new device and returns the `Device` instance. Numeric `width`, `height`, and `widthMedia` values without a unit are automatically suffixed with `'px'`.
+
+```ts
+add(props: DeviceProperties, options?: Record<string, any>): Device
+```
+
+<ParamField path="props" type="DeviceProperties" required>
+  Device definition object.
+
+  <Expandable title="DeviceProperties fields">
+    <ParamField path="props.id" type="string">
+      Unique device identifier. Falls back to `name` when not provided; a random id is generated if `name` is also absent.
+    </ParamField>
+    <ParamField path="props.name" type="string" required>
+      Human-readable device label shown in the toolbar.
+    </ParamField>
+    <ParamField path="props.width" type="string | null">
+      Width applied to the editor canvas iframe (e.g. `'768px'`). Pass `''` or `null` for full-width (Desktop). Numbers without a unit are auto-suffixed with `'px'`.
+    </ParamField>
+    <ParamField path="props.height" type="string">
+      Height applied to the canvas iframe. Empty string means unconstrained. Default: `''`.
+    </ParamField>
+    <ParamField path="props.widthMedia" type="string | null">
+      Width used in generated CSS `@media` queries. Falls back to `width` when not set.
+    </ParamField>
+    <ParamField path="props.minHeight" type="string">
+      Minimum height applied to the canvas iframe.
+    </ParamField>
+    <ParamField path="props.priority" type="number | null">
+      Controls the ordering of media queries. Lower values produce narrower (mobile-first) breakpoints. Auto-derived from `widthMedia` when not set.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```js
+// Basic device — canvas width and media query width are both '900px'
+const tablet = editor.Devices.add({
+  id: 'tablet',
+  name: 'Tablet',
+  width: '900px',
+});
+
+// Separate canvas width and media query width
+const tablet2 = editor.Devices.add({
+  id: 'tablet2',
+  name: 'Tablet (wide)',
+  width: '800px',       // iframe is 800px wide
+  widthMedia: '810px',  // @media (max-width: 810px) { ... }
+  height: '600px',
+});
+```
+
+---
+
+### `get(id)`
+
+Returns the `Device` with the given id (or name, for backwards compatibility). Returns `null` when not found.
+
+```ts
+get(id: string): Device | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The device id or name.
+</ParamField>
+
+```js
+const tablet = editor.Devices.get('tablet');
+console.log(JSON.stringify(tablet));
+// {"id":"tablet","name":"Tablet","width":"770px","widthMedia":"992px"}
+```
+
+---
+
+### `getAll()`
+
+Returns the internal `Devices` collection (a Backbone Collection). Access `.models` for a plain array.
+
+```ts
+getAll(): Devices
+```
+
+```js
+const all = editor.Devices.getAll().models;
+all.forEach(d => console.log(d.get('name'), d.get('width')));
+```
+
+---
+
+### `remove(device, opts?)`
+
+Removes a device by id or by passing a `Device` instance. Returns the removed device.
+
+```ts
+remove(device: string | Device, opts?: Record<string, any>): Device
+```
+
+<ParamField path="device" type="string | Device" required>
+  The device id or Device instance to remove.
+</ParamField>
+
+```js
+editor.Devices.remove('tablet2');
+// or
+const d = editor.Devices.get('tablet2');
+editor.Devices.remove(d);
+```
+
+---
+
+### `select(device, opts?)`
+
+Makes a device the active viewport. Updates the canvas iframe dimensions immediately. Returns the `DeviceManager` instance.
+
+```ts
+select(device: string | Device, opts?: Record<string, any>): this
+```
+
+<ParamField path="device" type="string | Device" required>
+  The device id or Device instance to activate.
+</ParamField>
+
+```js
+editor.Devices.select('tablet');
+// or
+editor.Devices.select(editor.Devices.get('tablet'));
+```
+
+---
+
+### `getSelected()`
+
+Returns the currently active `Device`, or `undefined` if no device is selected.
+
+```ts
+getSelected(): Device | undefined
+```
+
+```js
+const active = editor.Devices.getSelected();
+console.log(active?.get('name')); // 'Desktop'
+```
+
+---
+
+## Device instance API
+
+### `device.get(prop)`
+
+Returns a device property value (standard Backbone Model `get`).
+
+```js
+const d = editor.Devices.get('tablet');
+d.get('name');       // 'Tablet'
+d.get('width');      // '770px'
+d.get('widthMedia'); // '992px'
+d.get('priority');   // 992
+```
+
+### `device.getName()`
+
+Returns the device name (or id as a fallback).
+
+```ts
+getName(): string
+```
+
+### `device.getWidthMedia()`
+
+Returns the `widthMedia` value, or an empty string if not set.
+
+```ts
+getWidthMedia(): string
+```
+
+---
+
+## Device properties reference
+
+<ResponseField name="id" type="string">
+  Unique identifier. Defaults to `name` when not explicitly provided.
+</ResponseField>
+<ResponseField name="name" type="string">
+  Human-readable label for the device.
+</ResponseField>
+<ResponseField name="width" type="string | null">
+  Canvas iframe width. Empty string `''` means full width (no constraint). Numbers without a unit are auto-suffixed with `'px'`.
+</ResponseField>
+<ResponseField name="height" type="string">
+  Canvas iframe height. Empty by default (unconstrained).
+</ResponseField>
+<ResponseField name="widthMedia" type="string | null">
+  Width used in `@media` queries generated by GrapesJS. Falls back to `width` when `null`.
+</ResponseField>
+<ResponseField name="minHeight" type="string">
+  Minimum iframe height.
+</ResponseField>
+<ResponseField name="priority" type="number | null">
+  Ordering priority for media queries. Auto-calculated from `widthMedia` when not provided.
+</ResponseField>
+
+---
+
+## Media query integration
+
+GrapesJS uses `widthMedia` (falling back to `width`) when it emits CSS `@media` rules for styles applied under a specific device. The resulting media query is `max-width`-based by default:
+
+```css
+/* styles applied with 'tablet' device selected */
+@media (max-width: 992px) {
+  .my-section { padding: 16px; }
+}
+```
+
+<Note>
+  The Desktop device has `width: ''` and no `widthMedia`, so any styles set on Desktop produce global CSS without a media query wrapper.
+</Note>
+
+---
+
+## Built-in devices
+
+The default device set is:
+
+| id | Name | width | widthMedia |
+|---|---|---|---|
+| `desktop` | Desktop | `` (full width) | — |
+| `tablet` | Tablet | `770px` | `992px` |
+| `mobileLandscape` | Mobile landscape | `568px` | `768px` |
+| `mobilePortrait` | Mobile portrait | `320px` | `480px` |
+
+You can override or extend this list via `deviceManager.devices` at init time, or by calling `add()` at runtime.
+
+---
+
+## Common patterns
+
+### Custom device set
+
+```js
+grapesjs.init({
+  deviceManager: {
+    devices: [
+      { id: 'desktop', name: 'Desktop', width: '' },
+      { id: 'laptop',  name: 'Laptop',  width: '1280px', widthMedia: '1440px' },
+      { id: 'tablet',  name: 'Tablet',  width: '768px',  widthMedia: '1024px' },
+      { id: 'mobile',  name: 'Mobile',  width: '375px',  widthMedia: '768px' },
+    ],
+  },
+});
+```
+
+### Reacting to device changes in a custom toolbar
+
+```js
+editor.on('device:select', (newDevice, prevDevice) => {
+  document.querySelectorAll('.device-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.device === newDevice?.get('id'));
+  });
+});
+
+// Attach click handlers
+document.querySelectorAll('.device-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    editor.Devices.select(btn.dataset.device);
+  });
+});
+```
+
+---
+
+## Events
+
+Listen to device events on the editor instance:
+
+```js
+editor.on('device:add', (device) => {
+  console.log('Device added:', device.get('name'));
+});
+
+editor.on('device:select', (newDevice, prevDevice) => {
+  console.log('Switched to:', newDevice?.get('name'));
+});
+
+editor.on('device', ({ event, model }) => {
+  // catch-all for all device:* events
+});
+```
+
+| Event | Callback arguments | Description |
+|---|---|---|
+| `device:add` | `(device, opts)` | A new device was added to the collection. |
+| `device:add:before` | `(props, addFn, opts)` | Fires before a device is added. |
+| `device:remove` | `(device, opts)` | A device was removed. |
+| `device:remove:before` | `(device, removeFn, opts)` | Fires before a device is removed. |
+| `device:select` | `(newDevice, prevDevice)` | The active device changed. |
+| `device:select:before` | `(device, opts)` | Fires before a device is selected. |
+| `device:update` | `(device, changes, opts)` | A device's properties were updated. |
+| `device` | `({ event, model, ... })` | Catch-all for all `device:*` events. |

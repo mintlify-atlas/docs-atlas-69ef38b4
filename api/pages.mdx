@@ -1,0 +1,392 @@
+---
+title: "Pages API — Multi-Page Management in GrapesJS"
+description: "Complete API reference for editor.Pages (PageManager). Add, remove, select, and navigate pages. Access root components and handle page lifecycle events."
+---
+
+The `PageManager` module (`editor.Pages`) lets you build multi-page projects inside a single GrapesJS editor instance. Every project has at least one page — the editor creates one automatically if you do not define any — and switching pages swaps the canvas content while keeping shared styles and assets intact. Access the module via `editor.Pages`.
+
+## Configuration
+
+Declare initial pages in the `pageManager` init option:
+
+```js
+const editor = grapesjs.init({
+  pageManager: {
+    pages: [
+      {
+        id: 'home',
+        name: 'Home',
+        styles: '.hero { color: #111 }',
+        component: '<section class="hero"><h1>Welcome</h1></section>',
+      },
+      {
+        id: 'about',
+        name: 'About',
+        component: '<div>About us</div>',
+      },
+    ],
+  },
+});
+```
+
+<Note>
+  The top-level `components` and `style` editor options are automatically migrated to the first page's `component` and `styles` keys, so single-page setups require no changes.
+</Note>
+
+---
+
+## Methods
+
+### `add(props, opts?)`
+
+Creates a new page, adds it to the collection, and returns it. A random `id` is generated when none is provided.
+
+```ts
+add(props: PageProperties, opts?: AddOptions & SelectableOption & AbortOption): Page
+```
+
+<ParamField path="props" type="PageProperties" required>
+  Page definition object.
+
+  <Expandable title="PageProperties fields">
+    <ParamField path="props.id" type="string">
+      Unique page identifier. Auto-generated when omitted.
+    </ParamField>
+    <ParamField path="props.name" type="string">
+      Human-readable page name. Default: `''`.
+    </ParamField>
+    <ParamField path="props.component" type="string | ComponentDefinition | ComponentDefinition[]">
+      Initial page content — an HTML string, a component definition object, or an array of definitions.
+    </ParamField>
+    <ParamField path="props.styles" type="string | CssRuleJSON[]">
+      CSS rules for this page — a CSS string or an array of rule objects.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="opts" type="object">
+  <Expandable title="Options fields">
+    <ParamField path="opts.select" type="boolean">
+      Automatically select (activate) the new page after creation.
+    </ParamField>
+    <ParamField path="opts.silent" type="boolean">
+      Suppress events during creation.
+    </ParamField>
+    <ParamField path="opts.abort" type="boolean">
+      When `true` inside a `page:add:before` handler, prevents the page from being created.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```js
+const newPage = editor.Pages.add({
+  id: 'contact',
+  name: 'Contact',
+  styles: '.form { max-width: 600px }',
+  component: '<form class="form"><button>Submit</button></form>',
+});
+```
+
+---
+
+### `get(id)`
+
+Returns the page with the given id, or `undefined` if not found.
+
+```ts
+get(id: string): Page | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The page identifier.
+</ParamField>
+
+```js
+const page = editor.Pages.get('contact');
+```
+
+---
+
+### `getAll()`
+
+Returns an array of all pages in the project.
+
+```ts
+getAll(): Page[]
+```
+
+```js
+const pages = editor.Pages.getAll();
+pages.forEach(p => console.log(p.getId(), p.getName()));
+```
+
+---
+
+### `remove(page, opts?)`
+
+Removes the specified page and returns it. Accepts either a page id string or a `Page` instance.
+
+```ts
+remove(page: string | Page, opts?: RemoveOptions & AbortOption): Page | undefined | false
+```
+
+<ParamField path="page" type="string | Page" required>
+  The page id or Page instance to remove.
+</ParamField>
+
+```js
+editor.Pages.remove('contact');
+// or
+const pg = editor.Pages.get('contact');
+editor.Pages.remove(pg);
+```
+
+<Warning>
+  Removing the currently selected page does not automatically select another. Handle `page:remove` to switch to another page in your UI.
+</Warning>
+
+---
+
+### `getMain()`
+
+Returns the main (first) page. Specifically, returns the first page whose `type` attribute is `'main'`, falling back to the first page in the collection.
+
+```ts
+getMain(): Page | undefined
+```
+
+```js
+const main = editor.Pages.getMain();
+```
+
+---
+
+### `getSelected()`
+
+Returns the currently active (selected) page, or `undefined` if none is selected.
+
+```ts
+getSelected(): Page | undefined
+```
+
+```js
+const current = editor.Pages.getSelected();
+console.log(current?.getName());
+```
+
+---
+
+### `select(page, opts?)`
+
+Makes a page the active page, updating the canvas to display its content.
+
+```ts
+select(page: string | Page, opts?: SetOptions): this
+```
+
+<ParamField path="page" type="string | Page" required>
+  The page id or Page instance to activate.
+</ParamField>
+
+```js
+editor.Pages.select('about');
+// or
+editor.Pages.select(editor.Pages.get('about'));
+```
+
+---
+
+### `move(page, opts?)`
+
+Moves a page to a specific index in the collection. Returns the page on success, `undefined` if the page does not exist or the target index is out of bounds.
+
+```ts
+move(page: string | Page, opts?: { at?: number }): Page | undefined
+```
+
+<ParamField path="page" type="string | Page" required>
+  The page id or Page instance to move.
+</ParamField>
+<ParamField path="opts.at" type="number">
+  Zero-based target index.
+</ParamField>
+
+```js
+editor.Pages.move('about', { at: 0 }); // move to first position
+```
+
+---
+
+### `getAllWrappers()`
+
+Returns the root `ComponentWrapper` (body) from every frame in every page. Useful for project-wide component queries.
+
+```ts
+getAllWrappers(): ComponentWrapper[]
+```
+
+```js
+// Collect all image components from the entire project
+const images = editor.Pages
+  .getAllWrappers()
+  .flatMap(wrp => wrp.findType('image'));
+```
+
+---
+
+## Page instance API
+
+Each `Page` instance exposes the following methods:
+
+### `page.getId()`
+
+Returns the page's unique string identifier.
+
+```ts
+getId(): string
+```
+
+### `page.getName()`
+
+Returns the page's display name.
+
+```ts
+getName(): string
+```
+
+### `page.setName(name)`
+
+Updates the page's display name.
+
+```ts
+setName(name: string): this
+```
+
+### `page.getMainComponent()`
+
+Returns the root `ComponentWrapper` (the body/wrapper) from the page's main frame. Use this to get and export the page's HTML and CSS.
+
+```ts
+getMainComponent(): ComponentWrapper
+```
+
+```js
+const page = editor.Pages.getSelected();
+const root = page.getMainComponent();
+const html = editor.getHtml({ component: root });
+const css  = editor.getCss({ component: root });
+```
+
+### `page.getMainFrame()`
+
+Returns the first `Frame` of the page.
+
+```ts
+getMainFrame(): Frame
+```
+
+### `page.getAllFrames()`
+
+Returns all frames belonging to the page as an array.
+
+```ts
+getAllFrames(): Frame[]
+```
+
+---
+
+## Page properties reference
+
+<ResponseField name="id" type="string">
+  Unique identifier. Auto-generated if not provided at creation time.
+</ResponseField>
+<ResponseField name="name" type="string">
+  Human-readable display name. Default: `''`.
+</ResponseField>
+<ResponseField name="component" type="string | ComponentDefinition | ComponentDefinition[]">
+  Initial component content (write-only at creation time; use `getMainComponent()` to access the live model afterwards).
+</ResponseField>
+<ResponseField name="styles" type="string | CssRuleJSON[]">
+  Page-scoped CSS (write-only at creation time).
+</ResponseField>
+<ResponseField name="frames" type="Frames">
+  The internal Backbone collection of frame models. Access via `page.getFrames()`.
+</ResponseField>
+
+---
+
+## Common patterns
+
+### Building a custom page switcher
+
+```js
+const pm = editor.Pages;
+
+// Render your tab bar on any page change
+editor.on('page', () => {
+  const pages = pm.getAll();
+  const selected = pm.getSelected();
+  renderTabs(pages, selected);
+});
+
+function renderTabs(pages, selected) {
+  // ... update your UI
+}
+
+// Add a new blank page
+function addPage() {
+  const page = pm.add({ name: `Page ${pm.getAll().length + 1}` });
+  pm.select(page);
+}
+
+// Remove a page (and fall back to main)
+function removePage(id) {
+  pm.remove(id);
+  pm.select(pm.getMain());
+}
+```
+
+### Exporting all pages to HTML/CSS
+
+```js
+const pagesHtml = editor.Pages.getAll().map((page) => {
+  const component = page.getMainComponent();
+  return {
+    id: page.getId(),
+    name: page.getName(),
+    html: editor.getHtml({ component }),
+    css: editor.getCss({ component }),
+  };
+});
+```
+
+---
+
+## Events
+
+Listen to page events on the editor instance:
+
+```js
+editor.on('page:add', (page) => {
+  console.log('Page added:', page.getId());
+});
+
+editor.on('page:select', (page, previousPage) => {
+  console.log('Switched from', previousPage?.getId(), 'to', page.getId());
+});
+
+editor.on('page', ({ event, page }) => {
+  // catch-all — fires for every page:* event
+});
+```
+
+| Event | Callback arguments | Description |
+|---|---|---|
+| `page:add` | `(page, opts)` | A new page was added. |
+| `page:add:before` | `(props, addFn, opts)` | Fires before a page is added. Call `opts.abort = true` to cancel. |
+| `page:remove` | `(page, opts)` | A page was removed. |
+| `page:remove:before` | `(page, removeFn, opts)` | Fires before a page is removed. |
+| `page:select` | `(page, previousPage)` | A new page is now selected. |
+| `page:select:before` | `(page, opts)` | Fires before a page is selected. |
+| `page:update` | `(page, changes, opts)` | A page's properties changed. |
+| `page` | `({ event, page, options })` | Catch-all for all `page:*` events. |

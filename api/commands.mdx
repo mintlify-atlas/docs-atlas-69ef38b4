@@ -1,0 +1,386 @@
+---
+title: "GrapesJS Commands Module API Reference"
+description: "Reference for editor.Commands in GrapesJS. Register, run, and stop named actions. Covers the command object interface, built-in commands, and events."
+---
+
+The Commands module (`editor.Commands`) is a registry of named actions that can be run and stopped programmatically. Commands are the canonical way to trigger editor behaviour — from toggling the preview mode to deleting a selected component. GrapesJS ships with a set of built-in `core:*` commands, and you can register your own with full lifecycle support.
+
+```javascript
+const commands = editor.Commands;
+
+// Listen to any command execution
+editor.on('command:run', ({ id, result }) => {
+  console.log(`Command "${id}" executed`, result);
+});
+```
+
+<Tip>Configure the module at init time by passing a `commands` object to `grapesjs.init()`. See the [Configuration Object](https://github.com/GrapesJS/grapesjs/blob/master/src/commands/config/config.ts) for all options.</Tip>
+
+---
+
+## Command object interface
+
+A command is either a plain function (stateless) or an object with `run` and optionally `stop` methods. Commands with a `stop` method can be registered as **active** and toggled on/off.
+
+```typescript
+interface CommandObject {
+  run(editor: Editor, sender: any, options: Record<string, any>): any;
+  stop?(editor: Editor, sender: any, options: Record<string, any>): any;
+}
+```
+
+<CodeGroup>
+
+```typescript Object form (stateful)
+commands.add('my:toggle', {
+  run(editor, sender, opts) {
+    // activate something
+    editor.Canvas.getFrames().forEach(f => f.view?.render());
+  },
+  stop(editor, sender, opts) {
+    // deactivate something
+  },
+});
+```
+
+```typescript Function form (stateless)
+commands.add('my:alert', (editor, sender, opts) => {
+  alert(`Hello from ${opts.name ?? 'GrapesJS'}`);
+});
+```
+
+</CodeGroup>
+
+<Note>Stateless commands (function form or object without `stop`) cannot become "active" and will always execute on every `run()` call regardless of the `strict` setting.</Note>
+
+---
+
+## Methods
+
+### add
+
+Register a new command.
+
+```typescript
+add<T extends object = {}>(
+  id: string,
+  command: CommandFunction | CommandObject<any, T>
+): this
+```
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the command (e.g. `'my-plugin:do-thing'`). Use namespaced IDs to avoid collisions with built-in commands.
+</ParamField>
+
+<ParamField path="command" type="CommandObject | Function" required>
+  The command definition. Pass a plain function for a stateless command, or an object with `run` (and optionally `stop`) for a stateful one.
+</ParamField>
+
+```javascript
+commands.add('my:greet', {
+  run(editor, sender, opts) {
+    console.log(`Hello, ${opts.name}!`);
+  },
+  stop(editor) {
+    console.log('Stopped');
+  },
+});
+
+// Stateless shorthand
+commands.add('my:log', (editor) => {
+  console.log(editor.getHtml());
+});
+```
+
+---
+
+### get
+
+Retrieve a registered command definition by ID.
+
+```typescript
+get(id: string): CommandObject | undefined
+```
+
+<ParamField path="id" type="string" required>
+  The command ID to look up.
+</ParamField>
+
+```javascript
+const cmd = commands.get('core:preview');
+if (cmd) {
+  cmd.run(editor);
+}
+```
+
+---
+
+### has
+
+Check whether a command with the given ID is registered.
+
+```typescript
+has(id: string): boolean
+```
+
+```javascript
+if (commands.has('my:greet')) {
+  commands.run('my:greet', { name: 'World' });
+}
+```
+
+---
+
+### getAll
+
+Return all registered commands as a plain object keyed by ID.
+
+```typescript
+getAll(): Record<string, CommandObject>
+```
+
+```javascript
+const all = commands.getAll();
+Object.keys(all).forEach(id => console.log(id));
+```
+
+---
+
+### run
+
+Execute a command by ID. In `strict` mode (the default), calling `run()` on an already-active stateful command is a no-op unless `options.force` is set.
+
+```typescript
+run(id: string, options?: Record<string, any>): any
+```
+
+<ParamField path="id" type="string" required>
+  The command ID to execute.
+</ParamField>
+
+<ParamField path="options" type="object" default="{}">
+  Options forwarded to the command's `run` method. Set `options.force = true` to bypass the strict idempotency guard.
+</ParamField>
+
+```javascript
+// Run a built-in command
+commands.run('core:undo');
+
+// Run with options
+commands.run('my:greet', { name: 'Alice' });
+
+// Force re-run even if already active
+commands.run('core:preview', { force: true });
+```
+
+---
+
+### stop
+
+Stop an active command by ID. In `strict` mode, calling `stop()` on an inactive command is a no-op unless `options.force` is set.
+
+```typescript
+stop(id: string, options?: Record<string, any>): any
+```
+
+<ParamField path="id" type="string" required>
+  The command ID to stop.
+</ParamField>
+
+<ParamField path="options" type="object" default="{}">
+  Options forwarded to the command's `stop` method.
+</ParamField>
+
+```javascript
+commands.stop('core:preview');
+```
+
+---
+
+### isActive
+
+Return `true` if the command is currently active (i.e. `run()` has been called and `stop()` has not).
+
+```typescript
+isActive(id: string): boolean
+```
+
+Commands without a `stop` method are never considered active.
+
+```javascript
+commands.run('core:preview');
+commands.isActive('core:preview'); // true
+
+commands.stop('core:preview');
+commands.isActive('core:preview'); // false
+```
+
+---
+
+### getActive
+
+Return all currently active commands as an object mapping command IDs to their last return value.
+
+```typescript
+getActive(): Record<string, any>
+```
+
+```javascript
+const active = commands.getActive();
+// { 'core:preview': undefined, 'my:panel': returnValue }
+```
+
+---
+
+### extend
+
+Extend an existing command definition with additional properties or override existing methods. Useful when customising built-in commands.
+
+```typescript
+extend(id: string, cmd?: Partial<CommandObject>): this
+```
+
+<ParamField path="id" type="string" required>
+  The ID of the command to extend.
+</ParamField>
+
+<ParamField path="cmd" type="object" default="{}">
+  An object whose properties are merged into the existing command prototype.
+</ParamField>
+
+```javascript
+commands.extend('core:component-delete', {
+  run(editor, sender, opts) {
+    // Custom confirmation before deleting
+    if (confirm('Really delete?')) {
+      editor.getSelectedAll().forEach(c => c.remove());
+    }
+  },
+});
+```
+
+---
+
+## Built-in commands
+
+GrapesJS registers the following commands out of the box. All are accessible via `editor.runCommand()` or `editor.Commands.run()`.
+
+### UI commands
+
+| Command ID | Description |
+|---|---|
+| `core:preview` | Toggle preview mode (hides editor UI, shows final render) |
+| `core:fullscreen` | Toggle fullscreen mode |
+| `core:open-code` | Open the code export panel |
+| `core:open-layers` | Open the Layers panel |
+| `core:open-styles` | Open the Style Manager panel |
+| `core:open-traits` | Open the Trait Manager panel |
+| `core:open-blocks` | Open the Block Manager panel |
+| `core:open-assets` | Open the Asset Manager panel |
+
+### Edit commands
+
+| Command ID | Description |
+|---|---|
+| `core:undo` | Undo the last change |
+| `core:redo` | Redo the last undone change |
+| `core:copy` | Copy the selected component(s) |
+| `core:paste` | Paste the copied component(s) |
+| `core:canvas-clear` | Remove all components and styles from the canvas |
+
+### Component commands
+
+| Command ID | Description |
+|---|---|
+| `core:component-delete` | Delete the selected component(s) |
+| `core:component-select` | Activate the component selection tool |
+| `core:component-outline` | Toggle component outlines (switch visibility) |
+| `core:component-offset` | Show padding/margin offsets |
+| `core:component-move` | Activate the move tool for the selected component |
+| `core:component-next` | Select the next sibling component |
+| `core:component-prev` | Select the previous sibling component |
+| `core:component-enter` | Enter (select first child of) the selected component |
+| `core:component-exit` | Exit to the parent component |
+| `core:component-style-clear` | Clear styles on the selected component |
+| `core:component-drag` | Activate absolute/translate drag mode |
+
+<Tip>The `core:resize` and `core:canvas-move` commands are also available for the canvas resize handle and canvas panning respectively.</Tip>
+
+---
+
+## Events
+
+All command events fire on the editor instance.
+
+### Global command events
+
+<ResponseField name="command:run" type="event">
+  Fired after any command's `run` method completes.
+
+  ```javascript
+  editor.on('command:run', ({ id, result, options }) => {
+    console.log(`Ran "${id}"`, result);
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="command:stop" type="event">
+  Fired after any command's `stop` method completes.
+
+  ```javascript
+  editor.on('command:stop', ({ id, result, options }) => {
+    console.log(`Stopped "${id}"`);
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="command:call" type="event">
+  Fired on both run and stop of any command.
+
+  ```javascript
+  editor.on('command:call', ({ id, result, options, type }) => {
+    // type is 'run' or 'stop'
+    console.log(`"${id}" called as ${type}`);
+  });
+  ```
+</ResponseField>
+
+### Per-command events
+
+Replace `COMMAND-ID` with the actual command identifier (e.g. `core:preview`).
+
+| Event pattern | When it fires |
+|---|---|
+| `command:run:before:COMMAND-ID` | Before `run` is called — set `options.abort = true` to cancel |
+| `command:run:COMMAND-ID` | After `run` completes |
+| `command:abort:COMMAND-ID` | When the run is aborted via `options.abort` |
+| `command:stop:before:COMMAND-ID` | Before `stop` is called |
+| `command:stop:COMMAND-ID` | After `stop` completes |
+| `command:call:COMMAND-ID` | On run or stop of the specific command |
+
+```javascript
+// Intercept and cancel a command
+editor.on('command:run:before:core:component-delete', ({ options }) => {
+  if (!confirm('Delete this component?')) {
+    options.abort = true;
+  }
+});
+
+// React after a specific command runs
+editor.on('command:run:core:preview', ({ result, options }) => {
+  console.log('Preview activated');
+});
+```
+
+### Aborting a command
+
+Set `options.abort = true` inside a `command:run:before:COMMAND-ID` listener to prevent the command from executing. The `command:abort:COMMAND-ID` event fires in that case.
+
+```javascript
+editor.on('command:run:before:core:canvas-clear', ({ options }) => {
+  const confirmed = confirm('This will delete all content. Continue?');
+  if (!confirmed) {
+    options.abort = true;
+  }
+});
+```
